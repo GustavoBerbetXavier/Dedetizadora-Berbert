@@ -389,6 +389,21 @@ function render() {
   r.fn($('#view'));
 }
 // Busca alterações feitas por outros funcionários (ao trocar de tela ou voltar ao app).
+// Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
+// (uma aba aberta continua com a versão de quando foi carregada).
+const VERSAO_APP = '2026-10-11.2';
+async function verificarVersao() {
+  try {
+    const r = await fetch('versao.json', { cache: 'no-store' });
+    const { versao } = await r.json();
+    if (versao && versao !== VERSAO_APP) $('#nova-versao').hidden = false;
+  } catch { /* sem conexão: tenta de novo depois */ }
+}
+$('#nova-versao-btn').addEventListener('click', () => location.reload());
+setInterval(verificarVersao, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersao(); });
+verificarVersao();
+
 async function atualizarDados() {
   if (!DB.perfil() || $('#app').hidden || DB.carregadoHa() < 20000) return;
   const rota = rotaAtual();
@@ -505,7 +520,15 @@ function clientes(el) {
     <div id="aviso-codigos"></div>
     <div class="cartao" style="padding:0"><div id="lista"></div></div>`;
   const semCodigo = DB.listar('clientes').filter((c) => !c.codigo);
-  if (semCodigo.length) {
+  const repetidos = semCodigo.length ? encontrarRepetidos() : [];
+  if (repetidos.length) {
+    // Enquanto houver repetidos, não oferece gerar códigos (senão as cópias também ganhariam código).
+    $('#aviso-codigos', el).innerHTML = `<div class="cartao aviso-linha alerta">
+      <span><b>${repetidos.length} clientes estão repetidos:</b> existem duas vezes no cadastro, uma com código e outra sem.</span>
+      ${DB.perfil().admin ? '<button class="btn peq" id="ver-repetidos">Ver e remover repetidos</button>'
+        : '<span class="ajuda" style="margin:0">Peça ao administrador para remover os repetidos.</span>'}</div>`;
+    if (DB.perfil().admin) $('#ver-repetidos', el).addEventListener('click', () => telaRepetidos(repetidos));
+  } else if (semCodigo.length) {
     $('#aviso-codigos', el).innerHTML = `<div class="cartao aviso-linha">
       <span>${semCodigo.length} cliente${semCodigo.length === 1 ? ' está' : 's estão'} sem código.</span>
       <button class="btn sec peq" id="gerar-codigos">Gerar códigos automaticamente</button></div>`;
@@ -578,6 +601,97 @@ function clientes(el) {
       DB.remover('clientes', id);
       render();
     }
+  });
+}
+
+/* ---------- Clientes repetidos (cadastrados com e sem código) ---------- */
+function assinaturaCliente(c) {
+  return [normalizar(c.nome), digitos(c.documento), digitos(c.telefone), normalizar(c.email),
+    normalizar(c.endereco), normalizar(c.bairro), normalizar(c.cidade)].join('|');
+}
+// Para cada cliente SEM código, procura a cópia COM código: primeiro com todos os dados iguais;
+// se não houver, pelo mesmo CPF/CNPJ (ou nome + telefone), desde que exista uma única cópia.
+function encontrarRepetidos() {
+  const todos = DB.listar('clientes');
+  const porAssinatura = new Map(), porChave = new Map();
+  const adicionar = (mapa, k, c) => { if (!mapa.has(k)) mapa.set(k, []); mapa.get(k).push(c); };
+  todos.filter((c) => c.codigo).forEach((c) => {
+    adicionar(porAssinatura, assinaturaCliente(c), c);
+    adicionar(porChave, chaveCliente(c, true), c);
+  });
+  const usados = new Set();
+  const pares = [];
+  for (const d of todos.filter((c) => !c.codigo)) {
+    let candidatos = (porAssinatura.get(assinaturaCliente(d)) || []).filter((x) => !usados.has(x.id));
+    if (!candidatos.length) {
+      const pelaChave = (porChave.get(chaveCliente(d, true)) || []).filter((x) => !usados.has(x.id));
+      if (pelaChave.length === 1) candidatos = pelaChave;
+    }
+    if (candidatos.length) {
+      usados.add(candidatos[0].id);
+      pares.push({ manter: candidatos[0], remover: d });
+    }
+  }
+  return pares;
+}
+
+function telaRepetidos(pares) {
+  const cols = ['agendamentos', 'orcamentos', 'laudos', 'financeiro'];
+  const ids = new Set(pares.map((p) => p.remover.id));
+  const ligados = cols.reduce((n, col) => n + DB.listar(col).filter((r) => ids.has(r.clienteId)).length, 0);
+  const amostra = pares.slice(0, 8);
+  abrirModal('Remover clientes repetidos', `
+    <p>Encontrei <b>${pares.length.toLocaleString('pt-BR')} clientes cadastrados duas vezes</b>: uma cópia com código e outra sem.
+      Vou <b>manter a cópia com código</b> e apagar a cópia sem código.</p>
+    <ul class="lista-ajuda">
+      <li>Se a cópia sem código tiver algum dado que falta na outra (bairro, e-mail...), ele é copiado antes de apagar.</li>
+      <li>${ligados ? `${ligados} agendamento(s), orçamento(s), laudo(s) ou lançamento(s) ligados às cópias serão passados para o cliente mantido.`
+        : 'Nenhum agendamento, orçamento, laudo ou lançamento está ligado às cópias.'}</li>
+      <li>Clientes que existem só uma vez não são alterados.</li>
+    </ul>
+    <b class="rotulo-previa">Exemplos:</b>
+    <div class="tabela-wrap"><table><thead><tr><th>Fica (com código)</th><th>Sai (sem código)</th><th>Telefone</th></tr></thead><tbody>
+      ${amostra.map((p) => `<tr><td><span class="cod-col">${esc(p.manter.codigo)}</span> ${esc(p.manter.nome)}</td><td>${esc(p.remover.nome)}</td><td>${esc(p.manter.telefone || p.remover.telefone)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="ajuda" style="margin-top:12px">Por segurança, baixe uma cópia dos dados antes de continuar.</p>
+    <div class="form-acoes">
+      <button type="button" class="btn sec" id="rep-backup" style="margin-right:auto">Baixar backup</button>
+      <button type="button" class="btn sec" data-cancelar>Cancelar</button>
+      <button type="button" class="btn perigo" id="rep-remover">Remover ${pares.length.toLocaleString('pt-BR')} repetidos</button>
+    </div>`, (raiz) => {
+    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
+    $('#rep-backup', raiz).addEventListener('click', baixarBackup);
+    $('#rep-remover', raiz).addEventListener('click', async (e) => {
+      if (!confirmar(`Apagar ${pares.length} cópias sem código e manter as com código? Esta ação não pode ser desfeita.`)) return;
+      const botao = e.target;
+      botao.disabled = true;
+      try {
+        const destino = new Map(pares.map((p) => [p.remover.id, p.manter.id]));
+        for (const col of cols) {
+          DB.listar(col).filter((r) => destino.has(r.clienteId))
+            .forEach((r) => DB.salvarItem(col, { id: r.id, clienteId: destino.get(r.clienteId) }));
+        }
+        const completar = [];
+        for (const { manter, remover } of pares) {
+          const campos = {};
+          Object.keys(remover).forEach((k) => {
+            if (!['id', 'criadoEm', 'codigo', 'tipo'].includes(k) && remover[k] && !manter[k]) campos[k] = remover[k];
+          });
+          if (Object.keys(campos).length) completar.push({ id: manter.id, ...campos });
+        }
+        if (completar.length) {
+          await DB.atualizarVarios('clientes', completar, (f, de) => (botao.textContent = `Copiando dados... ${f} de ${de}`));
+        }
+        await DB.removerVarios('clientes', pares.map((p) => p.remover.id), (f, de) => (botao.textContent = `Removendo... ${f} de ${de}`));
+        fecharModal();
+        avisar(`${pares.length} clientes repetidos removidos.`);
+        render();
+      } catch (err) {
+        avisar('A remoção parou: ' + err.message + ' Abra de novo para continuar de onde parou.', 'erro');
+        fecharModal();
+        render();
+      }
+    });
   });
 }
 
@@ -1447,6 +1561,14 @@ function formMinhaSenha() {
 /* =====================================================================
    CONFIGURAÇÕES (somente administrador)
    ===================================================================== */
+function baixarBackup() {
+  const blob = new Blob([DB.exportar()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `backup-berbert-${hojeISO()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
 function configuracoes(el) {
   const c = DB.config();
   el.innerHTML = `
@@ -1478,14 +1600,7 @@ function configuracoes(el) {
       avisar('Dados da empresa salvos.');
     });
   });
-  $('#exportar', el).addEventListener('click', () => {
-    const blob = new Blob([DB.exportar()], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `backup-berbert-${hojeISO()}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+  $('#exportar', el).addEventListener('click', baixarBackup);
   $('#importar', el).addEventListener('change', async (e) => {
     const arq = e.target.files[0];
     e.target.value = '';

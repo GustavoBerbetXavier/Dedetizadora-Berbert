@@ -207,6 +207,18 @@ const DB = (() => {
         if (aoProgredir) aoProgredir(Math.min(i + 500, itens.length), itens.length);
       }
     },
+    // Remove muitos registros de uma vez, em lotes.
+    async removerVarios(col, ids, aoProgredir) {
+      for (let i = 0; i < ids.length; i += 100) {
+        const lote = ids.slice(i, i + 100);
+        const { error } = await sb.from(col).delete().in('id', lote);
+        if (error) throw new Error(traduzirErro(error));
+        const apagados = new Set(lote);
+        dados[col] = dados[col].filter((x) => !apagados.has(x.id));
+        if (indices[col]) lote.forEach((id) => indices[col].delete(id));
+        if (aoProgredir) aoProgredir(Math.min(i + 100, ids.length), ids.length);
+      }
+    },
     async proximoNumero(tipo) {
       const { data, error } = await sb.rpc('proximo_numero', { tipo });
       if (error) throw new Error(traduzirErro(error));

@@ -97,6 +97,14 @@ body {
 .pag-num { width: 64px; padding: 5px 6px; border: 1px solid var(--borda); border-radius: 6px; font-size: 14px; text-align: center; }
 .pag-total { color: var(--suave); }
 
+.aviso-linha.alerta { background: #fdecea; border-color: #f3c3bd; }
+.lista-ajuda { margin: 8px 0 14px; padding-left: 20px; color: var(--texto); font-size: 14px; line-height: 1.5; }
+#nova-versao { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 12px;
+  background: var(--topo); color: #fff; padding: 10px 14px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 14px;
+  max-width: calc(100% - 32px); }
+#nova-versao[hidden] { display: none; }
+#nova-versao .btn { background: var(--marca-laranja); }
+
 /* Importação de planilha */
 .importacao h3 { font-size: 15px; margin: 18px 0 4px; }
 .grade-mapa { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }
