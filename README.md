@@ -89,6 +89,10 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
   O sistema reconhece as colunas sozinho (Nome, Telefone, CPF/CNPJ, Endereço, Número,
   Bairro, Cidade, UF, CEP...), mostra uma prévia e pula clientes repetidos. Há também
   um botão para baixar uma planilha modelo.
+- **Código do cliente**: se a planilha tiver uma coluna de código (Código, Cód., ID...), ele é
+  importado; quem vier sem código recebe um automático, continuando a numeração. Clientes
+  novos já vêm com o próximo código. O código aparece na lista, na busca, no histórico e nos
+  documentos, e o sistema não deixa dois clientes com o mesmo código.
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em

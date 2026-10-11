@@ -41,7 +41,7 @@ function campoCliente(selecionado, { obrigatorio = true, extra = '' } = {}) {
   const c = DB.obter('clientes', selecionado);
   return `<label class="full">Cliente${obrigatorio ? ' *' : ''}<div class="linha-cliente">
     <div class="busca-cliente" data-obrigatorio="${obrigatorio ? 1 : ''}">
-      <input type="text" class="bc-texto" value="${esc(c ? c.nome : '')}" placeholder="Digite nome, telefone ou CPF/CNPJ..." autocomplete="off">
+      <input type="text" class="bc-texto" value="${esc(c ? c.nome : '')}" placeholder="Digite código, nome, telefone ou CPF/CNPJ..." autocomplete="off">
       <input type="hidden" name="clienteId" value="${c ? c.id : ''}">
       <div class="bc-lista" hidden></div>
     </div>${extra}</div></label>`;
@@ -52,11 +52,11 @@ function ligarCampoCliente(raiz) {
   const texto = $('.bc-texto', caixa), oculto = $('[name=clienteId]', caixa), lista = $('.bc-lista', caixa);
   let indice = null, resultados = [], ativo = -1;
   const montarIndice = () => DB.listar('clientes').map((c) => ({
-    c, busca: normalizar(c.nome) + ' ' + digitos(c.telefone) + ' ' + digitos(c.documento) + ' ' + normalizar(c.bairro) + ' ' + normalizar(c.cidade),
+    c, cod: normalizar(c.codigo), busca: normalizar(c.codigo) + ' ' + normalizar(c.nome) + ' ' + digitos(c.telefone) + ' ' + digitos(c.documento) + ' ' + normalizar(c.bairro) + ' ' + normalizar(c.cidade),
   })).sort((a, b) => (a.c.nome || '').localeCompare(b.c.nome || ''));
   const desenhar = () => {
     lista.innerHTML = resultados.length ? resultados.map((c, i) => `<button type="button" data-id="${c.id}" class="${i === ativo ? 'ativo' : ''}">
-        <b>${esc(c.nome)}</b><small>${esc([c.telefone, c.bairro, c.cidade].filter(Boolean).join(' · '))}</small></button>`).join('')
+        <b>${c.codigo ? `<span class="cod">${esc(c.codigo)}</span>` : ''}${esc(c.nome)}</b><small>${esc([c.telefone, c.bairro, c.cidade].filter(Boolean).join(' · '))}</small></button>`).join('')
       : '<div class="bc-vazio">Nenhum cliente encontrado.</div>';
     lista.hidden = false;
   };
@@ -65,7 +65,11 @@ function ligarCampoCliente(raiz) {
     const termos = normalizar(texto.value).split(' ').filter(Boolean)
       .map((t) => (/^[\d().\-\/\s]+$/.test(t) ? digitos(t) || t : t));
     resultados = [];
+    const consulta = normalizar(texto.value);
+    const porCodigo = consulta && indice.find((item) => item.cod === consulta);
+    if (porCodigo) resultados.push(porCodigo.c);
     for (const item of indice) {
+      if (item === porCodigo) continue;
       if (termos.every((t) => item.busca.includes(t))) resultados.push(item.c);
       if (resultados.length >= 30) break;
     }
@@ -246,7 +250,7 @@ function cabecalhoDoc() {
 function blocoCliente(cli) {
   if (!cli) return '';
   return `<h3>Cliente</h3><div class="info">
-    <div><b>Nome:</b> ${esc(cli.nome)}</div><div><b>CPF/CNPJ:</b> ${esc(cli.documento)}</div>
+    <div><b>Nome:</b> ${esc(cli.nome)}${cli.codigo ? ` <span style="color:#555">(cód. ${esc(cli.codigo)})</span>` : ''}</div><div><b>CPF/CNPJ:</b> ${esc(cli.documento)}</div>
     <div><b>Endereço:</b> ${esc([cli.endereco, cli.bairro, cli.cep && 'CEP ' + cli.cep].filter(Boolean).join(', '))}</div><div><b>Cidade:</b> ${esc(cli.cidade)}</div>
     <div><b>Telefone:</b> ${esc(cli.telefone)}</div><div><b>E-mail:</b> ${esc(cli.email)}</div></div>`;
 }
@@ -491,21 +495,40 @@ function tabelaAgendamentos(lista, comAcoes = true) {
 function clientes(el) {
   el.innerHTML = `
     <div class="cabecalho"><h2>Clientes</h2>
-      <div class="acoes"><input class="busca" id="busca" placeholder="Buscar por nome, telefone, cidade...">
+      <div class="acoes"><input class="busca" id="busca" placeholder="Buscar por código, nome, telefone, cidade...">
       <button class="btn sec" id="importar">Importar planilha</button>
       <button class="btn" id="novo">+ Novo cliente</button></div></div>
+    <div id="aviso-codigos"></div>
     <div class="cartao" style="padding:0"><div id="lista"></div></div>`;
+  const semCodigo = DB.listar('clientes').filter((c) => !c.codigo);
+  if (semCodigo.length) {
+    $('#aviso-codigos', el).innerHTML = `<div class="cartao aviso-linha">
+      <span>${semCodigo.length} cliente${semCodigo.length === 1 ? ' está' : 's estão'} sem código.</span>
+      <button class="btn sec peq" id="gerar-codigos">Gerar códigos automaticamente</button></div>`;
+    $('#gerar-codigos', el).addEventListener('click', (e) => {
+      const gerar = geradorCodigos();
+      const lista = semCodigo.slice()
+        .sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || '') || (a.nome || '').localeCompare(b.nome || ''))
+        .map((c) => ({ id: c.id, codigo: gerar() }));
+      if (!confirmar(`Gerar códigos de ${lista[0].codigo} a ${lista[lista.length - 1].codigo} para ${lista.length} clientes, na ordem de cadastro (e por nome, para quem foi cadastrado junto)?`)) return;
+      enviando(e.target, async () => {
+        await DB.atualizarVarios('clientes', lista, (feitos, de) => (e.target.textContent = `Gerando... ${feitos} de ${de}`));
+        avisar('Códigos gerados.');
+        render();
+      });
+    });
+  }
   const desenhar = () => {
     const q = $('#busca', el).value.toLowerCase();
     const todos = DB.listar('clientes')
-      .filter((c) => [c.nome, c.telefone, c.cidade, c.bairro, c.documento].join(' ').toLowerCase().includes(q))
+      .filter((c) => [c.codigo, c.nome, c.telefone, c.cidade, c.bairro, c.documento].join(' ').toLowerCase().includes(q))
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
     // Mostra no máximo 200 por vez para a tela continuar rápida com muitos clientes.
     const lista = todos.slice(0, 200);
     const rodape = todos.length > lista.length
       ? `<div class="vazio">Mostrando ${lista.length} de ${todos.length} clientes. Use a busca para encontrar os demais.</div>` : '';
-    $('#lista', el).innerHTML = lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nome</th><th>Telefone</th><th>Bairro / Cidade</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
-      ${lista.map((c) => `<tr><td><b>${esc(c.nome)}</b></td><td>${esc(c.telefone)}</td><td>${esc([c.bairro, c.cidade].filter(Boolean).join(' / '))}</td>
+    $('#lista', el).innerHTML = lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Cód.</th><th>Nome</th><th>Telefone</th><th>Bairro / Cidade</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
+      ${lista.map((c) => `<tr><td class="cod-col">${esc(c.codigo || '—')}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.telefone)}</td><td>${esc([c.bairro, c.cidade].filter(Boolean).join(' / '))}</td>
         <td>${c.tipo === 'PJ' ? 'Empresa' : 'Pessoa física'}</td>
         <td><div class="acoes">
           <button class="btn sec peq" data-acao="hist" data-id="${c.id}">Histórico</button>
@@ -534,6 +557,8 @@ function clientes(el) {
 
 /* ---------- Importação de clientes por planilha (.csv) ---------- */
 const CAMPOS_IMPORTACAO = [
+  ['codigo', 'Código do cliente', ['codigo', 'cod', 'codigo cliente', 'codigo do cliente', 'cod cliente', 'cod do cliente', 'id', 'id cliente',
+    'cliente id', 'n cliente', 'numero do cliente', 'matricula', 'ref', 'referencia']],
   ['nome', 'Nome / Razão social *', ['nome', 'cliente', 'razao social', 'nome completo', 'nome do cliente', 'nome cliente', 'razao', 'nome fantasia']],
   ['documento', 'CPF / CNPJ', ['cpf/cnpj', 'cpf', 'cnpj', 'cpf cnpj', 'cpf ou cnpj', 'documento', 'cnpj/cpf']],
   ['telefone', 'Telefone / WhatsApp', ['telefone', 'celular', 'whatsapp', 'fone', 'tel', 'telefone 1', 'contato telefonico']],
@@ -604,7 +629,7 @@ function sugerirColunas(cabecalho) {
 function montarClienteImportado(linha, mapa) {
   const v = (k) => (mapa[k] === undefined || mapa[k] === '' ? '' : String(linha[mapa[k]] ?? '').trim());
   const c = {
-    nome: v('nome'), documento: v('documento'), email: v('email'), bairro: v('bairro'),
+    codigo: v('codigo').replace(/\.0+$/, ''), nome: v('nome'), documento: v('documento'), email: v('email'), bairro: v('bairro'),
     contato: v('contato'), imovel: v('imovel'), cep: v('cep'),
   };
   let endereco = [v('endereco'), v('numero')].filter(Boolean).join(', ');
@@ -619,10 +644,21 @@ function montarClienteImportado(linha, mapa) {
   Object.keys(c).forEach((k) => { if (!c[k]) delete c[k]; });
   return c;
 }
-function chaveCliente(c) {
+// Chave para reconhecer cliente repetido: o código, se houver; senão CPF/CNPJ; senão nome + telefone.
+function chaveCliente(c, ignorarCodigo = false) {
+  if (c.codigo && !ignorarCodigo) return 'cod:' + normalizar(c.codigo);
   const doc = digitos(c.documento);
   if (doc.length >= 11) return 'doc:' + doc;
   return 'nome:' + normalizar(c.nome) + '|' + digitos(c.telefone);
+}
+// Gera os próximos códigos numéricos, continuando do maior código já usado
+// (mantendo zeros à esquerda, se os códigos existentes usarem, ex.: 00123).
+function geradorCodigos(extras = []) {
+  const numericos = DB.listar('clientes').map((c) => c.codigo).concat(extras)
+    .filter((c) => c && /^\d+$/.test(String(c))).map(String);
+  let ultimo = numericos.reduce((m, c) => Math.max(m, Number(c)), 0);
+  const largura = numericos.some((c) => c.length > 1 && c[0] === '0') ? Math.max(...numericos.map((c) => c.length)) : 0;
+  return () => String(++ultimo).padStart(largura, '0');
 }
 
 function importarClientes() {
@@ -639,8 +675,8 @@ function importarClientes() {
       <div id="etapa-mapa"></div>
     </div>`, (raiz) => {
     $('#baixar-modelo', raiz).addEventListener('click', () => {
-      const modelo = '\uFEFFNome;Telefone;CPF/CNPJ;E-mail;Endereço;Número;Bairro;Cidade;UF;CEP;Observações\n' +
-        'Maria da Silva;(11) 99999-0000;123.456.789-00;maria@email.com;Rua das Flores;100;Centro;São Paulo;SP;01000-000;Cliente desde 2020\n';
+      const modelo = '\uFEFFCódigo;Nome;Telefone;CPF/CNPJ;E-mail;Endereço;Número;Bairro;Cidade;UF;CEP;Observações\n' +
+        '1;Maria da Silva;(11) 99999-0000;123.456.789-00;maria@email.com;Rua das Flores;100;Centro;São Paulo;SP;01000-000;Cliente desde 2020\n';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([modelo], { type: 'text/csv;charset=utf-8' }));
       a.download = 'modelo-clientes.csv';
@@ -675,7 +711,7 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
       ${CAMPOS_IMPORTACAO.map(([k, rotulo]) => `<label>${rotulo}<select data-campo="${k}">${opcoesColunas(mapa[k])}</select></label>`).join('')}
     </div>
     <label class="check-linha"><input type="checkbox" id="pular-dup" checked>
-      Pular clientes repetidos (mesmo CPF/CNPJ, ou mesmo nome e telefone) que já estão cadastrados ou aparecem duas vezes na planilha</label>
+      Pular clientes repetidos (mesmo código; sem código, mesmo CPF/CNPJ ou mesmo nome e telefone) que já estão cadastrados ou aparecem duas vezes na planilha</label>
     <div id="previa"></div>
     <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
       <button type="button" class="btn" id="confirmar-importacao">Importar</button></div>`;
@@ -684,8 +720,9 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
   const calcular = () => {
     $$('[data-campo]', el).forEach((s) => (mapa[s.dataset.campo] = s.value === '' ? undefined : Number(s.value)));
     const pular = $('#pular-dup', el).checked;
-    const vistos = new Set(DB.listar('clientes').map(chaveCliente));
-    resultado = { novos: [], semNome: 0, repetidos: 0 };
+    const vistos = new Set();
+    DB.listar('clientes').forEach((c) => { vistos.add(chaveCliente(c)); vistos.add(chaveCliente(c, true)); });
+    resultado = { novos: [], semNome: 0, repetidos: 0, codigosAuto: 0 };
     for (const linha of corpo) {
       const c = montarClienteImportado(linha, mapa);
       if (!c.nome) { resultado.semNome++; continue; }
@@ -694,16 +731,20 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
       vistos.add(chave);
       resultado.novos.push(c);
     }
+    // Quem veio sem código na planilha recebe um código automático em sequência.
+    const gerar = geradorCodigos(resultado.novos.map((c) => c.codigo));
+    resultado.novos.forEach((c) => { if (!c.codigo) { c.codigo = gerar(); resultado.codigosAuto++; } });
     const amostra = resultado.novos.slice(0, 5);
     $('#previa', el).innerHTML = `
       <div class="resumo-importacao">
         <span class="tag verde">${resultado.novos.length} para importar</span>
         ${resultado.repetidos ? `<span class="tag amarelo">${resultado.repetidos} repetidos (serão pulados)</span>` : ''}
         ${resultado.semNome ? `<span class="tag vermelho">${resultado.semNome} sem nome (serão pulados)</span>` : ''}
+        ${resultado.codigosAuto ? `<span class="tag azul">${resultado.codigosAuto} sem código (receberão código automático)</span>` : ''}
       </div>
       ${amostra.length ? `<b class="rotulo-previa">Prévia dos primeiros clientes:</b>
-      <div class="tabela-wrap"><table><thead><tr><th>Nome</th><th>Telefone</th><th>CPF/CNPJ</th><th>Endereço</th><th>Bairro</th><th>Cidade</th></tr></thead><tbody>
-        ${amostra.map((c) => `<tr><td>${esc(c.nome)}</td><td>${esc(c.telefone)}</td><td>${esc(c.documento)}</td><td>${esc(c.endereco)}</td><td>${esc(c.bairro)}</td><td>${esc(c.cidade)}</td></tr>`).join('')}
+      <div class="tabela-wrap"><table><thead><tr><th>Cód.</th><th>Nome</th><th>Telefone</th><th>CPF/CNPJ</th><th>Endereço</th><th>Bairro</th><th>Cidade</th></tr></thead><tbody>
+        ${amostra.map((c) => `<tr><td>${esc(c.codigo)}</td><td>${esc(c.nome)}</td><td>${esc(c.telefone)}</td><td>${esc(c.documento)}</td><td>${esc(c.endereco)}</td><td>${esc(c.bairro)}</td><td>${esc(c.cidade)}</td></tr>`).join('')}
       </tbody></table></div>` : ''}`;
     const botao = $('#confirmar-importacao', el);
     botao.disabled = !resultado.novos.length;
@@ -733,9 +774,11 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
 }
 
 function formCliente(id, aoSalvar) {
-  const c = id ? DB.obter('clientes', id) : { tipo: 'PF' };
+  const c = id ? DB.obter('clientes', id) : { tipo: 'PF', codigo: geradorCodigos()() };
   abrirModal(id ? 'Editar cliente' : 'Novo cliente', `
     <form class="form">
+      ${campo('Código', 'codigo', c.codigo)}
+      <div></div>
       ${campo('Nome / Razão social *', 'nome', c.nome, 'text', 'required full')}
       <label>Tipo<select name="tipo">${opcoes([['PF', 'Pessoa física'], ['PJ', 'Empresa']], c.tipo)}</select></label>
       ${campo('CPF / CNPJ', 'documento', c.documento)}
@@ -754,7 +797,11 @@ function formCliente(id, aoSalvar) {
     $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const salvo = DB.salvarItem('clientes', { ...lerForm(form), id: id || undefined });
+      const dados = lerForm(form);
+      const cod = normalizar(dados.codigo);
+      const outro = cod && DB.listar('clientes').find((x) => x.id !== id && normalizar(x.codigo) === cod);
+      if (outro) { avisar(`O código ${dados.codigo} já é do cliente ${outro.nome}.`, 'erro'); form.codigo.focus(); return; }
+      const salvo = DB.salvarItem('clientes', { ...dados, id: id || undefined });
       fecharModal();
       if (aoSalvar) aoSalvar(salvo); else render();
     });
@@ -769,7 +816,7 @@ function historicoCliente(id) {
   const fin = DB.listar('financeiro').filter((f) => f.clienteId === id);
   const pago = fin.filter((f) => f.tipo === 'receita' && f.pago).reduce((s, f) => s + num(f.valor), 0);
   const aberto = fin.filter((f) => f.tipo === 'receita' && !f.pago).reduce((s, f) => s + num(f.valor), 0);
-  abrirModal(`Histórico — ${c.nome}`, `
+  abrirModal(`Histórico — ${c.codigo ? c.codigo + ' · ' : ''}${c.nome}`, `
     <p>${esc(c.telefone)} · ${esc([c.endereco, c.bairro, c.cidade].filter(Boolean).join(', '))}</p>
     <div class="grade-kpi">
       ${DB.pode('agenda') ? `<div class="kpi"><div class="rotulo">Serviços</div><div class="valor">${ags.length}</div></div>` : ''}

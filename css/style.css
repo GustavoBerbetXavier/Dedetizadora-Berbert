@@ -85,6 +85,12 @@ body {
 .bc-lista button:hover, .bc-lista button.ativo { background: #eef5e3; }
 .bc-vazio { padding: 10px; font-size: 13px; color: var(--suave); }
 
+.bc-lista .cod, .cod-col { font-variant-numeric: tabular-nums; color: var(--suave); }
+.bc-lista .cod { font-weight: 600; margin-right: 6px; }
+.cod-col { white-space: nowrap; font-size: 14px; }
+.aviso-linha { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px;
+  background: #fff8ef; border-color: #f6d9b8; }
+
 /* Importação de planilha */
 .importacao h3 { font-size: 15px; margin: 18px 0 4px; }
 .grade-mapa { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }

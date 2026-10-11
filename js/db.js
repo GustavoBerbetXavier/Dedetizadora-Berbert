@@ -191,6 +191,22 @@ const DB = (() => {
       }
       return novos.length;
     },
+    // Atualiza muitos registros de uma vez (ex.: gerar códigos de clientes), em lotes.
+    async atualizarVarios(col, itens, aoProgredir) {
+      const agora = new Date().toISOString();
+      const completos = itens.map((x) => ({ ...this.obter(col, x.id), ...x }));
+      const posicao = new Map(dados[col].map((y, j) => [y.id, j]));
+      for (let i = 0; i < completos.length; i += 500) {
+        const lote = completos.slice(i, i + 500);
+        const { error } = await sb.from(col).upsert(lote.map(({ id, ...resto }) => ({ id, dados: resto, atualizado_em: agora })));
+        if (error) throw new Error(traduzirErro(error));
+        for (const x of lote) {
+          if (posicao.has(x.id)) dados[col][posicao.get(x.id)] = x;
+          if (indices[col]) indices[col].set(x.id, x);
+        }
+        if (aoProgredir) aoProgredir(Math.min(i + 500, itens.length), itens.length);
+      }
+    },
     async proximoNumero(tipo) {
       const { data, error } = await sb.rpc('proximo_numero', { tipo });
       if (error) throw new Error(traduzirErro(error));
