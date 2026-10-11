@@ -492,10 +492,14 @@ function tabelaAgendamentos(lista, comAcoes = true) {
 /* =====================================================================
    CLIENTES
    ===================================================================== */
+// Página e busca da lista de clientes ficam guardadas ao editar um cliente ou voltar à tela.
+const estadoClientes = { pagina: 1, busca: '' };
+const POR_PAGINA = 10;
+
 function clientes(el) {
   el.innerHTML = `
     <div class="cabecalho"><h2>Clientes</h2>
-      <div class="acoes"><input class="busca" id="busca" placeholder="Buscar por código, nome, telefone, cidade...">
+      <div class="acoes"><input class="busca" id="busca" placeholder="Buscar por código, nome, telefone, cidade..." value="${esc(estadoClientes.busca)}">
       <button class="btn sec" id="importar">Importar planilha</button>
       <button class="btn" id="novo">+ Novo cliente</button></div></div>
     <div id="aviso-codigos"></div>
@@ -519,14 +523,20 @@ function clientes(el) {
     });
   }
   const desenhar = () => {
-    const q = $('#busca', el).value.toLowerCase();
+    const q = estadoClientes.busca.toLowerCase();
     const todos = DB.listar('clientes')
       .filter((c) => [c.codigo, c.nome, c.telefone, c.cidade, c.bairro, c.documento].join(' ').toLowerCase().includes(q))
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-    // Mostra no máximo 200 por vez para a tela continuar rápida com muitos clientes.
-    const lista = todos.slice(0, 200);
-    const rodape = todos.length > lista.length
-      ? `<div class="vazio">Mostrando ${lista.length} de ${todos.length} clientes. Use a busca para encontrar os demais.</div>` : '';
+    const paginas = Math.max(1, Math.ceil(todos.length / POR_PAGINA));
+    estadoClientes.pagina = Math.min(Math.max(1, estadoClientes.pagina), paginas);
+    const pag = estadoClientes.pagina;
+    const lista = todos.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
+    const rodape = `<div class="paginacao">
+      <button class="btn sec peq" data-pag="anterior" ${pag <= 1 ? 'disabled' : ''}>Anterior</button>
+      <span>Página: <input type="number" class="pag-num" min="1" max="${paginas}" value="${pag}" aria-label="Página"> de ${paginas}</span>
+      <button class="btn sec peq" data-pag="proxima" ${pag >= paginas ? 'disabled' : ''}>Próxima</button>
+      <span class="pag-total">Total: ${todos.length.toLocaleString('pt-BR')}</span>
+    </div>`;
     $('#lista', el).innerHTML = lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Cód.</th><th>Nome</th><th>Telefone</th><th>Bairro / Cidade</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
       ${lista.map((c) => `<tr><td class="cod-col">${esc(c.codigo || '—')}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.telefone)}</td><td>${esc([c.bairro, c.cidade].filter(Boolean).join(' / '))}</td>
         <td>${c.tipo === 'PJ' ? 'Empresa' : 'Pessoa física'}</td>
@@ -539,7 +549,23 @@ function clientes(el) {
     </tbody></table></div>${rodape}` : '<div class="vazio">Nenhum cliente encontrado.</div>';
   };
   desenhar();
-  $('#busca', el).addEventListener('input', desenhar);
+  $('#busca', el).addEventListener('input', (e) => {
+    estadoClientes.busca = e.target.value;
+    estadoClientes.pagina = 1;
+    desenhar();
+  });
+  $('#lista', el).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pag]');
+    if (!b || b.disabled) return;
+    estadoClientes.pagina += b.dataset.pag === 'proxima' ? 1 : -1;
+    desenhar();
+    $('#lista', el).scrollIntoView({ block: 'nearest' });
+  });
+  $('#lista', el).addEventListener('change', (e) => {
+    if (!e.target.matches('.pag-num')) return;
+    estadoClientes.pagina = parseInt(e.target.value, 10) || 1;
+    desenhar();
+  });
   $('#novo', el).addEventListener('click', () => formCliente(null));
   $('#importar', el).addEventListener('click', importarClientes);
   $('#lista', el).addEventListener('click', (e) => {

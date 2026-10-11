@@ -91,6 +91,12 @@ body {
 .aviso-linha { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px;
   background: #fff8ef; border-color: #f6d9b8; }
 
+/* Paginação da lista de clientes */
+.paginacao { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; padding: 12px; border-top: 1px solid var(--borda); font-size: 14px; }
+.paginacao .btn:disabled { opacity: .45; cursor: default; }
+.pag-num { width: 64px; padding: 5px 6px; border: 1px solid var(--borda); border-radius: 6px; font-size: 14px; text-align: center; }
+.pag-total { color: var(--suave); }
+
 /* Importação de planilha */
 .importacao h3 { font-size: 15px; margin: 18px 0 4px; }
 .grade-mapa { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }
