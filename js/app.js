@@ -716,19 +716,39 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
     <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
       <button type="button" class="btn" id="confirmar-importacao">Importar</button></div>`;
 
-  let resultado = { novos: [], semNome: 0, repetidos: 0 };
+  let resultado = { novos: [], atualizar: [], semNome: 0, repetidos: 0 };
   const calcular = () => {
     $$('[data-campo]', el).forEach((s) => (mapa[s.dataset.campo] = s.value === '' ? undefined : Number(s.value)));
     const pular = $('#pular-dup', el).checked;
-    const vistos = new Set();
-    DB.listar('clientes').forEach((c) => { vistos.add(chaveCliente(c)); vistos.add(chaveCliente(c, true)); });
-    resultado = { novos: [], semNome: 0, repetidos: 0, codigosAuto: 0 };
+    // Clientes já cadastrados, por código e por CPF/CNPJ (ou nome + telefone).
+    const porCodigo = new Map(), porChave = new Map();
+    DB.listar('clientes').forEach((c) => {
+      if (c.codigo) porCodigo.set(normalizar(c.codigo), c);
+      porChave.set(chaveCliente(c, true), c);
+    });
+    const vistosNoArquivo = new Set(), atualizados = new Set();
+    resultado = { novos: [], atualizar: [], semNome: 0, repetidos: 0, codigosAuto: 0 };
     for (const linha of corpo) {
       const c = montarClienteImportado(linha, mapa);
       if (!c.nome) { resultado.semNome++; continue; }
       const chave = chaveCliente(c);
-      if (pular && vistos.has(chave)) { resultado.repetidos++; continue; }
-      vistos.add(chave);
+      if (pular && vistosNoArquivo.has(chave)) { resultado.repetidos++; continue; }
+      vistosNoArquivo.add(chave);
+      // Código da planilha já pertence a um cliente cadastrado: é o mesmo cliente.
+      if (c.codigo && porCodigo.has(normalizar(c.codigo))) { resultado.repetidos++; continue; }
+      const existente = pular && porChave.get(chaveCliente(c, true));
+      if (existente) {
+        // Cliente já cadastrado sem código (ex.: importado antes): recebe o código da planilha
+        // e os dados que estiverem faltando no cadastro.
+        if (c.codigo && !existente.codigo && !atualizados.has(existente.id)) {
+          const campos = { id: existente.id, codigo: c.codigo };
+          Object.keys(c).forEach((k) => { if (k !== 'codigo' && c[k] && !existente[k]) campos[k] = c[k]; });
+          resultado.atualizar.push(campos);
+          atualizados.add(existente.id);
+          porCodigo.set(normalizar(c.codigo), existente);
+        } else resultado.repetidos++;
+        continue;
+      }
       resultado.novos.push(c);
     }
     // Quem veio sem código na planilha recebe um código automático em sequência.
@@ -737,7 +757,8 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
     const amostra = resultado.novos.slice(0, 5);
     $('#previa', el).innerHTML = `
       <div class="resumo-importacao">
-        <span class="tag verde">${resultado.novos.length} para importar</span>
+        <span class="tag verde">${resultado.novos.length} novos para importar</span>
+        ${resultado.atualizar.length ? `<span class="tag laranja">${resultado.atualizar.length} já cadastrados (receberão o código da planilha)</span>` : ''}
         ${resultado.repetidos ? `<span class="tag amarelo">${resultado.repetidos} repetidos (serão pulados)</span>` : ''}
         ${resultado.semNome ? `<span class="tag vermelho">${resultado.semNome} sem nome (serão pulados)</span>` : ''}
         ${resultado.codigosAuto ? `<span class="tag azul">${resultado.codigosAuto} sem código (receberão código automático)</span>` : ''}
@@ -747,8 +768,9 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
         ${amostra.map((c) => `<tr><td>${esc(c.codigo)}</td><td>${esc(c.nome)}</td><td>${esc(c.telefone)}</td><td>${esc(c.documento)}</td><td>${esc(c.endereco)}</td><td>${esc(c.bairro)}</td><td>${esc(c.cidade)}</td></tr>`).join('')}
       </tbody></table></div>` : ''}`;
     const botao = $('#confirmar-importacao', el);
-    botao.disabled = !resultado.novos.length;
-    botao.textContent = `Importar ${resultado.novos.length} cliente${resultado.novos.length === 1 ? '' : 's'}`;
+    const n = resultado.novos.length, m = resultado.atualizar.length;
+    botao.disabled = !n && !m;
+    botao.textContent = [n || !m ? `Importar ${n} cliente${n === 1 ? '' : 's'}` : '', m ? `${n ? 'e a' : 'A'}tualizar ${m}` : ''].filter(Boolean).join(' ');
   };
   el.addEventListener('change', (e) => { if (e.target.matches('[data-campo], #pular-dup')) calcular(); });
   $('[data-cancelar]', el).addEventListener('click', fecharModal);
@@ -757,11 +779,18 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
     const botao = e.target;
     botao.disabled = true;
     try {
+      const m = resultado.atualizar.length;
+      if (m) {
+        await DB.atualizarVarios('clientes', resultado.atualizar, (feitos, de) => {
+          botao.textContent = `Atualizando... ${feitos} de ${de}`;
+        });
+        resultado.atualizar = [];
+      }
       const total = await DB.adicionarVarios('clientes', resultado.novos, (feitos, de) => {
         botao.textContent = `Importando... ${feitos} de ${de}`;
       });
       fecharModal();
-      avisar(`${total} clientes importados com sucesso!`);
+      avisar([total ? `${total} clientes importados` : '', m ? `${m} clientes atualizados com o código` : ''].filter(Boolean).join(' e ') + '.');
       render();
     } catch (err) {
       avisar('A importação parou: ' + err.message + ' Os clientes já gravados foram mantidos.', 'erro');
