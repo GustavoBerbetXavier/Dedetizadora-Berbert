@@ -105,6 +105,23 @@ body {
 #nova-versao[hidden] { display: none; }
 #nova-versao .btn { background: var(--marca-laranja); }
 
+/* Filtros e abas */
+.filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
+.filtros label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--suave); }
+.filtros select { padding: 9px 10px; border: 1px solid var(--borda); border-radius: 7px; font-size: 14px; background: #fff; color: var(--texto); }
+.filtros .filtro-busca { flex: 1; min-width: 220px; }
+.filtros .filtro-busca .busca { width: 100%; min-width: 0; }
+.abas { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--borda); margin-bottom: 14px; }
+.aba { background: none; border: 0; border-bottom: 3px solid transparent; padding: 9px 12px; font: inherit; font-size: 14px; color: var(--suave);
+  cursor: pointer; white-space: nowrap; }
+.aba:hover { color: var(--texto); }
+.aba.ativa { color: var(--primaria-escura); font-weight: 600; border-bottom-color: var(--marca-laranja); }
+.aba .cont { display: inline-block; background: #eceeed; color: #555; border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 600; margin-left: 4px; }
+.aba.ativa .cont { background: #ffe8d6; color: #a64500; }
+tr.inativo td { color: var(--suave); }
+td .sub { font-size: 12px; color: var(--suave); margin-top: 2px; }
+.lista-ajuda .atencao { color: #8a5a06; }
+
 /* Importação de planilha */
 .importacao h3 { font-size: 15px; margin: 18px 0 4px; }
 .grade-mapa { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }
@@ -160,7 +177,7 @@ th { font-size: 13px; color: var(--suave); font-weight: 600; background: #fafbfa
 td.num, th.num { text-align: right; }
 .vazio { color: var(--suave); text-align: center; padding: 24px; }
 
-.tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .tag.verde { background: #dff3e8; color: var(--verde-escuro); }
 .tag.amarelo { background: #fcf0d9; color: #8a5a06; }
 .tag.vermelho { background: #f8dedb; color: #8e2a20; }

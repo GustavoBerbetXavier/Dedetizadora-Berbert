@@ -93,6 +93,14 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
   importado; quem vier sem código recebe um automático, continuando a numeração. Clientes
   novos já vêm com o próximo código. O código aparece na lista, na busca, no histórico e nos
   documentos, e o sistema não deixa dois clientes com o mesmo código.
+- **Importar orçamentos/ordens de uma planilha** (administrador): em **Orçamentos → Importar
+  planilha**. Colunas reconhecidas: número, código do cliente (id - cliente), cliente, emissão,
+  valor, situação e vendedor. Cada orçamento é ligado ao cliente pelo código; clientes que não
+  existirem são cadastrados. Números que já existem são pulados (pode importar de novo sem
+  duplicar) e a numeração continua depois do maior número importado.
+- **Filtros de orçamentos**: Geral, Por Número, Cancelado, Finalizado, Executado, Em Execução e
+  Pendente, com busca por cliente (código ou nome) e paginação.
+- **Filtros de clientes**: Razão Social, Fantasia, CNPJ/CPF, Cidade, Código e situação Ativo/Inativo.
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em

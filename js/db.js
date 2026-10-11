@@ -189,7 +189,12 @@ const DB = (() => {
         if (indices[col]) lote.forEach((x) => indices[col].set(x.id, x));
         if (aoProgredir) aoProgredir(i + lote.length, novos.length);
       }
-      return novos.length;
+      return novos;
+    },
+    // Faz a numeração de orçamentos/laudos continuar depois do maior número importado.
+    async ajustarNumeracao(orcamento = 0, laudo = 0) {
+      const { error } = await sb.rpc('ajustar_numeracao', { orcamento, laudo });
+      if (error) throw new Error(traduzirErro(error));
     },
     // Atualiza muitos registros de uma vez (ex.: gerar códigos de clientes), em lotes.
     async atualizarVarios(col, itens, aoProgredir) {

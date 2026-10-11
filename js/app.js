@@ -391,7 +391,7 @@ function render() {
 // Busca alterações feitas por outros funcionários (ao trocar de tela ou voltar ao app).
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-11.2';
+const VERSAO_APP = '2026-10-11.3';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -433,8 +433,11 @@ $('#menu-btn').addEventListener('click', () => $('#menu').classList.toggle('aber
 
 /* ---------- Status / tags ---------- */
 const STATUS_AG = [['agendado', 'Agendado'], ['concluido', 'Concluído'], ['cancelado', 'Cancelado']];
-const STATUS_ORC = [['pendente', 'Pendente'], ['aprovado', 'Aprovado'], ['recusado', 'Recusado']];
-const COR_STATUS = { agendado: 'azul', concluido: 'verde', cancelado: 'cinza', pendente: 'amarelo', aprovado: 'verde', recusado: 'vermelho' };
+const STATUS_ORC = [['pendente', 'Pendente'], ['em_execucao', 'Em Execução'], ['executado', 'Executado'], ['finalizado', 'Finalizado'], ['cancelado', 'Cancelado']];
+// Situações usadas antes no app, convertidas para as atuais.
+const STATUS_ORC_ANTIGO = { aprovado: 'em_execucao', recusado: 'cancelado' };
+const statusOrc = (o) => STATUS_ORC_ANTIGO[o.status] || o.status || 'pendente';
+const COR_STATUS = { agendado: 'azul', concluido: 'verde', cancelado: 'cinza', pendente: 'amarelo', em_execucao: 'azul', executado: 'laranja', finalizado: 'verde' };
 function tag(status, lista) {
   const r = (lista.find(([v]) => v === status) || [status, status])[1];
   return `<span class="tag ${COR_STATUS[status] || 'cinza'}">${esc(r)}</span>`;
@@ -459,7 +462,7 @@ function painel(el) {
   const vencidas = fin.filter((f) => !f.pago && f.vencimento && f.vencimento < hoje);
   const saldoMes = fin.filter((f) => f.pago && (f.dataPagamento || f.vencimento || '').startsWith(mes))
     .reduce((s, f) => s + (f.tipo === 'receita' ? 1 : -1) * num(f.valor), 0);
-  const orcPend = DB.listar('orcamentos').filter((o) => o.status === 'pendente').length;
+  const orcPend = DB.listar('orcamentos').filter((o) => statusOrc(o) === 'pendente').length;
 
   const kpis = [];
   if (verAgenda) kpis.push(['Serviços hoje', agHoje.length]);
@@ -504,19 +507,82 @@ function tabelaAgendamentos(lista, comAcoes = true) {
   </tbody></table></div>`;
 }
 
+/* ---------- Paginação (usada em Clientes e Orçamentos) ---------- */
+const POR_PAGINA = 10;
+function paginar(lista, estado) {
+  const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
+  estado.pagina = Math.min(Math.max(1, estado.pagina), paginas);
+  const pag = estado.pagina;
+  return {
+    itens: lista.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA),
+    html: `<div class="paginacao">
+      <button class="btn sec peq" data-pag="anterior" ${pag <= 1 ? 'disabled' : ''}>Anterior</button>
+      <span>Página: <input type="number" class="pag-num" min="1" max="${paginas}" value="${pag}" aria-label="Página"> de ${paginas}</span>
+      <button class="btn sec peq" data-pag="proxima" ${pag >= paginas ? 'disabled' : ''}>Próxima</button>
+      <span class="pag-total">Total: ${lista.length.toLocaleString('pt-BR')}</span>
+    </div>`,
+  };
+}
+function ligarPaginacao(caixa, estado, desenhar) {
+  caixa.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pag]');
+    if (!b || b.disabled) return;
+    estado.pagina += b.dataset.pag === 'proxima' ? 1 : -1;
+    desenhar();
+    caixa.scrollIntoView({ block: 'nearest' });
+  });
+  caixa.addEventListener('change', (e) => {
+    if (!e.target.matches('.pag-num')) return;
+    estado.pagina = parseInt(e.target.value, 10) || 1;
+    desenhar();
+  });
+}
+
 /* =====================================================================
    CLIENTES
    ===================================================================== */
-// Página e busca da lista de clientes ficam guardadas ao editar um cliente ou voltar à tela.
-const estadoClientes = { pagina: 1, busca: '' };
-const POR_PAGINA = 10;
+// Página e filtros da lista ficam guardados ao editar um cliente ou voltar à tela.
+const estadoClientes = { pagina: 1, busca: '', campo: 'todos', situacao: 'todos' };
+const FILTROS_CLIENTE = [
+  ['todos', 'Todos os campos', 'Buscar por código, nome, telefone, cidade...'],
+  ['nome', 'Razão Social', 'Digite a razão social ou nome...'],
+  ['fantasia', 'Fantasia', 'Digite o nome fantasia...'],
+  ['documento', 'CNPJ/CPF', 'Digite o CNPJ ou CPF...'],
+  ['cidade', 'Cidade', 'Digite a cidade...'],
+  ['codigo', 'Código', 'Digite o código exato...'],
+];
+const clienteAtivo = (c) => c.ativo !== false;
+function filtrarClientes(lista, { campo, busca, situacao }) {
+  const nq = normalizar(busca), dq = digitos(busca);
+  return lista.filter((c) => {
+    if (situacao === 'ativos' && !clienteAtivo(c)) return false;
+    if (situacao === 'inativos' && clienteAtivo(c)) return false;
+    if (!nq) return true;
+    switch (campo) {
+      case 'nome': return normalizar(c.nome).includes(nq);
+      case 'fantasia': return normalizar(c.fantasia).includes(nq);
+      case 'documento': return dq ? digitos(c.documento).includes(dq) : normalizar(c.documento).includes(nq);
+      case 'cidade': return normalizar(c.cidade).includes(nq);
+      case 'codigo': return normalizar(c.codigo) === nq;
+      default:
+        return normalizar([c.codigo, c.nome, c.fantasia, c.telefone, c.cidade, c.bairro, c.documento].join(' ')).includes(nq)
+          || (dq.length >= 3 && (digitos(c.telefone).includes(dq) || digitos(c.documento).includes(dq)));
+    }
+  });
+}
 
 function clientes(el) {
+  const placeholder = () => (FILTROS_CLIENTE.find(([v]) => v === estadoClientes.campo) || FILTROS_CLIENTE[0])[2];
   el.innerHTML = `
     <div class="cabecalho"><h2>Clientes</h2>
-      <div class="acoes"><input class="busca" id="busca" placeholder="Buscar por código, nome, telefone, cidade..." value="${esc(estadoClientes.busca)}">
+      <div class="acoes">
       <button class="btn sec" id="importar">Importar planilha</button>
       <button class="btn" id="novo">+ Novo cliente</button></div></div>
+    <div class="filtros">
+      <label>Filtrar por<select id="f-campo">${opcoes(FILTROS_CLIENTE.map(([v, r]) => [v, r]), estadoClientes.campo)}</select></label>
+      <label class="filtro-busca">Busca<input class="busca" id="busca" placeholder="${placeholder()}" value="${esc(estadoClientes.busca)}"></label>
+      <label>Situação<select id="f-situacao">${opcoes([['todos', 'Ativos e inativos'], ['ativos', 'Ativos'], ['inativos', 'Inativos']], estadoClientes.situacao)}</select></label>
+    </div>
     <div id="aviso-codigos"></div>
     <div class="cartao" style="padding:0"><div id="lista"></div></div>`;
   const semCodigo = DB.listar('clientes').filter((c) => !c.codigo);
@@ -546,22 +612,13 @@ function clientes(el) {
     });
   }
   const desenhar = () => {
-    const q = estadoClientes.busca.toLowerCase();
-    const todos = DB.listar('clientes')
-      .filter((c) => [c.codigo, c.nome, c.telefone, c.cidade, c.bairro, c.documento].join(' ').toLowerCase().includes(q))
+    const todos = filtrarClientes(DB.listar('clientes'), estadoClientes)
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-    const paginas = Math.max(1, Math.ceil(todos.length / POR_PAGINA));
-    estadoClientes.pagina = Math.min(Math.max(1, estadoClientes.pagina), paginas);
-    const pag = estadoClientes.pagina;
-    const lista = todos.slice((pag - 1) * POR_PAGINA, pag * POR_PAGINA);
-    const rodape = `<div class="paginacao">
-      <button class="btn sec peq" data-pag="anterior" ${pag <= 1 ? 'disabled' : ''}>Anterior</button>
-      <span>Página: <input type="number" class="pag-num" min="1" max="${paginas}" value="${pag}" aria-label="Página"> de ${paginas}</span>
-      <button class="btn sec peq" data-pag="proxima" ${pag >= paginas ? 'disabled' : ''}>Próxima</button>
-      <span class="pag-total">Total: ${todos.length.toLocaleString('pt-BR')}</span>
-    </div>`;
-    $('#lista', el).innerHTML = lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Cód.</th><th>Nome</th><th>Telefone</th><th>Bairro / Cidade</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
-      ${lista.map((c) => `<tr><td class="cod-col">${esc(c.codigo || '—')}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.telefone)}</td><td>${esc([c.bairro, c.cidade].filter(Boolean).join(' / '))}</td>
+    const { itens: lista, html: rodape } = paginar(todos, estadoClientes);
+    $('#lista', el).innerHTML = lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Cód.</th><th>Razão social / Nome</th><th>Telefone</th><th>Bairro / Cidade</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
+      ${lista.map((c) => `<tr class="${clienteAtivo(c) ? '' : 'inativo'}"><td class="cod-col">${esc(c.codigo || '—')}</td>
+        <td><b>${esc(c.nome)}</b>${clienteAtivo(c) ? '' : ' <span class="tag cinza">Inativo</span>'}${c.fantasia ? `<div class="sub">${esc(c.fantasia)}</div>` : ''}</td>
+        <td>${esc(c.telefone)}</td><td>${esc([c.bairro, c.cidade].filter(Boolean).join(' / '))}</td>
         <td>${c.tipo === 'PJ' ? 'Empresa' : 'Pessoa física'}</td>
         <td><div class="acoes">
           <button class="btn sec peq" data-acao="hist" data-id="${c.id}">Histórico</button>
@@ -577,18 +634,19 @@ function clientes(el) {
     estadoClientes.pagina = 1;
     desenhar();
   });
-  $('#lista', el).addEventListener('click', (e) => {
-    const b = e.target.closest('[data-pag]');
-    if (!b || b.disabled) return;
-    estadoClientes.pagina += b.dataset.pag === 'proxima' ? 1 : -1;
-    desenhar();
-    $('#lista', el).scrollIntoView({ block: 'nearest' });
-  });
-  $('#lista', el).addEventListener('change', (e) => {
-    if (!e.target.matches('.pag-num')) return;
-    estadoClientes.pagina = parseInt(e.target.value, 10) || 1;
+  $('#f-campo', el).addEventListener('change', (e) => {
+    estadoClientes.campo = e.target.value;
+    estadoClientes.pagina = 1;
+    $('#busca', el).placeholder = placeholder();
+    $('#busca', el).focus();
     desenhar();
   });
+  $('#f-situacao', el).addEventListener('change', (e) => {
+    estadoClientes.situacao = e.target.value;
+    estadoClientes.pagina = 1;
+    desenhar();
+  });
+  ligarPaginacao($('#lista', el), estadoClientes, desenhar);
   $('#novo', el).addEventListener('click', () => formCliente(null));
   $('#importar', el).addEventListener('click', importarClientes);
   $('#lista', el).addEventListener('click', (e) => {
@@ -699,7 +757,9 @@ function telaRepetidos(pares) {
 const CAMPOS_IMPORTACAO = [
   ['codigo', 'Código do cliente', ['codigo', 'cod', 'codigo cliente', 'codigo do cliente', 'cod cliente', 'cod do cliente', 'id', 'id cliente',
     'cliente id', 'n cliente', 'numero do cliente', 'matricula', 'ref', 'referencia']],
-  ['nome', 'Nome / Razão social *', ['nome', 'cliente', 'razao social', 'nome completo', 'nome do cliente', 'nome cliente', 'razao', 'nome fantasia']],
+  ['nome', 'Razão social / Nome *', ['razao social', 'nome', 'cliente', 'nome completo', 'nome do cliente', 'nome cliente', 'razao']],
+  ['fantasia', 'Nome fantasia', ['fantasia', 'nome fantasia', 'apelido']],
+  ['ativo', 'Situação (ativo/inativo)', ['situacao', 'ativo', 'status', 'situacao do cliente', 'ativo/inativo']],
   ['documento', 'CPF / CNPJ', ['cpf/cnpj', 'cpf', 'cnpj', 'cpf cnpj', 'cpf ou cnpj', 'documento', 'cnpj/cpf']],
   ['telefone', 'Telefone / WhatsApp', ['telefone', 'celular', 'whatsapp', 'fone', 'tel', 'telefone 1', 'contato telefonico']],
   ['telefone2', 'Outro telefone', ['telefone 2', 'telefone2', 'fone 2', 'tel 2', 'telefone fixo', 'fixo']],
@@ -752,12 +812,12 @@ function lerCSV(texto) {
   return linhas.filter((l) => l.some((v) => v.trim()));
 }
 // Sugere qual coluna da planilha corresponde a cada campo do cadastro.
-function sugerirColunas(cabecalho) {
+function sugerirColunas(cabecalho, campos = CAMPOS_IMPORTACAO) {
   const cols = cabecalho.map(normalizar);
   const usadas = new Set();
   const mapa = {};
   for (const exato of [true, false]) {
-    for (const [campoNome, , apelidos] of CAMPOS_IMPORTACAO) {
+    for (const [campoNome, , apelidos] of campos) {
       if (mapa[campoNome] !== undefined) continue;
       const i = cols.findIndex((c, idx) => !usadas.has(idx) && apelidos.some((a) =>
         exato ? c === a : a.length >= 4 && c.startsWith(a)));
@@ -769,7 +829,7 @@ function sugerirColunas(cabecalho) {
 function montarClienteImportado(linha, mapa) {
   const v = (k) => (mapa[k] === undefined || mapa[k] === '' ? '' : String(linha[mapa[k]] ?? '').trim());
   const c = {
-    codigo: v('codigo').replace(/\.0+$/, ''), nome: v('nome'), documento: v('documento'), email: v('email'), bairro: v('bairro'),
+    codigo: v('codigo').replace(/\.0+$/, ''), nome: v('nome'), fantasia: v('fantasia'), documento: v('documento'), email: v('email'), bairro: v('bairro'),
     contato: v('contato'), imovel: v('imovel'), cep: v('cep'),
   };
   let endereco = [v('endereco'), v('numero')].filter(Boolean).join(', ');
@@ -782,6 +842,8 @@ function montarClienteImportado(linha, mapa) {
   c.obs = obs.filter(Boolean).join('\n');
   c.tipo = digitos(c.documento).length === 14 ? 'PJ' : 'PF';
   Object.keys(c).forEach((k) => { if (!c[k]) delete c[k]; });
+  const sit = normalizar(v('ativo'));
+  if (sit) c.ativo = !['inativo', 'i', 'n', 'nao', '0', 'false', 'bloqueado', 'desativado', 'cancelado', 'excluido'].includes(sit);
   return c;
 }
 // Chave para reconhecer cliente repetido: o código, se houver; senão CPF/CNPJ; senão nome + telefone.
@@ -926,9 +988,9 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
         });
         resultado.atualizar = [];
       }
-      const total = await DB.adicionarVarios('clientes', resultado.novos, (feitos, de) => {
+      const total = (await DB.adicionarVarios('clientes', resultado.novos, (feitos, de) => {
         botao.textContent = `Importando... ${feitos} de ${de}`;
-      });
+      })).length;
       fecharModal();
       avisar([total ? `${total} clientes importados` : '', m ? `${m} clientes atualizados com o código` : ''].filter(Boolean).join(' e ') + '.');
       render();
@@ -947,8 +1009,9 @@ function formCliente(id, aoSalvar) {
   abrirModal(id ? 'Editar cliente' : 'Novo cliente', `
     <form class="form">
       ${campo('Código', 'codigo', c.codigo)}
-      <div></div>
-      ${campo('Nome / Razão social *', 'nome', c.nome, 'text', 'required full')}
+      <label class="check"><input type="checkbox" name="ativo" ${clienteAtivo(c) ? 'checked' : ''}> Cliente ativo</label>
+      ${campo('Razão social / Nome *', 'nome', c.nome, 'text', 'required full')}
+      ${campo('Nome fantasia', 'fantasia', c.fantasia, 'text', 'full')}
       <label>Tipo<select name="tipo">${opcoes([['PF', 'Pessoa física'], ['PJ', 'Empresa']], c.tipo)}</select></label>
       ${campo('CPF / CNPJ', 'documento', c.documento)}
       ${campo('Telefone / WhatsApp', 'telefone', c.telefone, 'tel')}
@@ -994,7 +1057,7 @@ function historicoCliente(id) {
     </div>
     ${DB.pode('agenda') ? `<h3>Agendamentos</h3>${tabelaAgendamentos(ags, false)}` : ''}
     ${DB.pode('orcamentos') ? `<h3>Orçamentos</h3>${orcs.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
-      ${orcs.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum orçamento.</div>'}` : ''}
+      ${orcs.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum orçamento.</div>'}` : ''}
     ${DB.pode('laudos') ? `<h3>Laudos</h3>${lds.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th>Pragas</th><th>Garantia até</th></tr></thead><tbody>
       ${lds.map((l) => `<tr><td>${l.numero}</td><td>${dataBR(l.data)}</td><td>${esc(l.pragas)}</td><td>${l.garantiaDias ? dataBR(somarDias(l.data, l.garantiaDias)) : '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum laudo.</div>'}` : ''}
   `);
@@ -1146,30 +1209,97 @@ function totalOrcamento(o) {
   return Math.max(0, sub - num(o.desconto));
 }
 
+// Filtro, busca e página da lista de orçamentos ficam guardados ao voltar à tela.
+const estadoOrc = { pagina: 1, filtro: 'geral', numero: '', cliente: '' };
+const FILTROS_ORC = [['geral', 'Geral'], ['numero', 'Por Número'], ['cancelado', 'Cancelado'], ['finalizado', 'Finalizado'],
+  ['executado', 'Executado'], ['em_execucao', 'Em Execução'], ['pendente', 'Pendente']];
+
 function orcamentos(el) {
-  const lista = DB.listar('orcamentos').sort((a, b) => b.numero - a.numero);
   const agendar = DB.pode('agenda');
+  const todos = DB.listar('orcamentos');
+  const contagem = { geral: todos.length };
+  todos.forEach((o) => { const st = statusOrc(o); contagem[st] = (contagem[st] || 0) + 1; });
   el.innerHTML = `
-    <div class="cabecalho"><h2>Orçamentos</h2><button class="btn" id="novo">+ Novo orçamento</button></div>
-    <div class="cartao" style="padding:0">${lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th class="num">Total</th><th>Status</th><th>Ações</th></tr></thead><tbody>
-      ${lista.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td>${esc(nomeCliente(o.clienteId))}</td>
-        <td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td>
+    <div class="cabecalho"><h2>Orçamentos</h2>
+      <div class="acoes">
+        ${DB.perfil().admin ? '<button class="btn sec" id="importar-orc">Importar planilha</button>' : ''}
+        <button class="btn" id="novo">+ Novo orçamento</button></div></div>
+    <div class="abas" role="tablist">
+      ${FILTROS_ORC.map(([v, r]) => `<button class="aba ${estadoOrc.filtro === v ? 'ativa' : ''}" data-filtro="${v}" role="tab">${r}${v === 'numero' ? '' : ` <span class="cont">${(contagem[v] || 0).toLocaleString('pt-BR')}</span>`}</button>`).join('')}
+    </div>
+    <div class="filtros">
+      ${estadoOrc.filtro === 'numero'
+        ? `<label class="filtro-busca">Número do orçamento<input class="busca" id="f-numero" inputmode="numeric" placeholder="Digite o número..." value="${esc(estadoOrc.numero)}"></label>`
+        : `<label class="filtro-busca">Cliente<input class="busca" id="f-cliente" placeholder="Buscar por código ou nome do cliente..." value="${esc(estadoOrc.cliente)}"></label>`}
+    </div>
+    <div class="cartao" style="padding:0"><div id="lista-orc"></div></div>`;
+
+  const desenhar = () => {
+    let lista;
+    if (estadoOrc.filtro === 'numero') {
+      const q = digitos(estadoOrc.numero);
+      lista = q ? todos.filter((o) => String(o.numero).startsWith(q))
+        .sort((a, b) => (String(b.numero) === q) - (String(a.numero) === q) || b.numero - a.numero) : [];
+    } else {
+      lista = estadoOrc.filtro === 'geral' ? todos.slice() : todos.filter((o) => statusOrc(o) === estadoOrc.filtro);
+      const nq = normalizar(estadoOrc.cliente);
+      if (nq) {
+        // Um número igual ao código de um cliente mostra só os orçamentos desse cliente.
+        const porCodigo = /^\d+$/.test(nq) && DB.listar('clientes').find((c) => normalizar(c.codigo) === nq);
+        lista = lista.filter((o) => {
+          const c = DB.obter('clientes', o.clienteId);
+          if (porCodigo) return c === porCodigo;
+          return c && (normalizar(c.codigo) === nq || normalizar(c.nome).includes(nq) || normalizar(c.fantasia).includes(nq));
+        });
+      }
+      lista.sort((a, b) => b.numero - a.numero);
+    }
+    const { itens, html: rodape } = paginar(lista, estadoOrc);
+    const vazio = estadoOrc.filtro === 'numero' && !digitos(estadoOrc.numero) ? 'Digite o número do orçamento.' : 'Nenhum orçamento encontrado.';
+    $('#lista-orc', el).innerHTML = itens.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Cliente</th><th>Vendedor</th><th class="num">Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>
+      ${itens.map((o) => {
+        const c = DB.obter('clientes', o.clienteId);
+        return `<tr><td>${o.numero}</td><td>${o.data ? dataBR(o.data) : '—'}</td>
+        <td>${c ? `${c.codigo ? `<span class="cod-col">${esc(c.codigo)}</span> ` : ''}${esc(c.nome)}` : '—'}</td>
+        <td>${esc(o.vendedor || '')}</td>
+        <td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td>
         <td><div class="acoes">
           <button class="btn peq" data-acao="imprimir" data-id="${o.id}">Imprimir / PDF</button>
-          ${o.status === 'pendente' ? `<button class="btn sec peq" data-acao="aprovar" data-id="${o.id}">${agendar ? 'Aprovar e agendar' : 'Aprovar'}</button>` : ''}
+          ${statusOrc(o) === 'pendente' ? `<button class="btn sec peq" data-acao="aprovar" data-id="${o.id}">${agendar ? 'Aprovar e agendar' : 'Aprovar'}</button>` : ''}
           <button class="btn sec peq" data-acao="editar" data-id="${o.id}">Editar</button>
           <button class="btn sec peq" data-acao="excluir" data-id="${o.id}">Excluir</button>
-        </div></td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhum orçamento cadastrado.</div>'}</div>`;
+        </div></td></tr>`;
+      }).join('')}
+    </tbody></table></div>${rodape}` : `<div class="vazio">${vazio}</div>`;
+  };
+  desenhar();
+
+  $('.abas', el).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-filtro]');
+    if (!b) return;
+    estadoOrc.filtro = b.dataset.filtro;
+    estadoOrc.pagina = 1;
+    orcamentos(el);
+    const campoBusca = $('#f-numero, #f-cliente', el);
+    if (campoBusca && estadoOrc.filtro === 'numero') campoBusca.focus();
+  });
+  const campoBusca = $('#f-numero, #f-cliente', el);
+  campoBusca.addEventListener('input', (e) => {
+    estadoOrc[estadoOrc.filtro === 'numero' ? 'numero' : 'cliente'] = e.target.value;
+    estadoOrc.pagina = 1;
+    desenhar();
+  });
+  ligarPaginacao($('#lista-orc', el), estadoOrc, desenhar);
   $('#novo', el).addEventListener('click', () => formOrcamento(null));
-  el.querySelector('.cartao').addEventListener('click', (e) => {
+  if (DB.perfil().admin) $('#importar-orc', el).addEventListener('click', importarOrcamentos);
+  $('#lista-orc', el).addEventListener('click', (e) => {
     const b = e.target.closest('[data-acao]');
     if (!b) return;
     const o = DB.obter('orcamentos', b.dataset.id);
     if (b.dataset.acao === 'imprimir') imprimirOrcamento(o);
     if (b.dataset.acao === 'editar') formOrcamento(o.id);
     if (b.dataset.acao === 'aprovar') {
-      DB.salvarItem('orcamentos', { id: o.id, status: 'aprovado' });
+      DB.salvarItem('orcamentos', { id: o.id, status: 'em_execucao' });
       if (!agendar) { render(); return; }
       formAgendamento(null, {
         clienteId: o.clienteId, data: hojeISO(), valor: totalOrcamento(o),
@@ -1181,16 +1311,203 @@ function orcamentos(el) {
   });
 }
 
+/* ---------- Importação de orçamentos por planilha (.csv) ---------- */
+const CAMPOS_IMPORTACAO_ORC = [
+  ['numero', 'Número do orçamento *', ['numero', 'nº', 'n', 'no', 'numero do orcamento', 'numero orcamento', 'orcamento', 'os', 'numero os', 'ordem', 'pedido']],
+  ['codigoCliente', 'Código do cliente', ['id - cliente', 'id cliente', 'id-cliente', 'codigo cliente', 'codigo do cliente', 'cod cliente', 'cliente id', 'cod']],
+  ['cliente', 'Nome do cliente', ['cliente', 'nome', 'nome do cliente', 'razao social', 'nome cliente']],
+  ['emissao', 'Emissão (data)', ['emissao', 'data', 'data emissao', 'data de emissao', 'data do orcamento']],
+  ['valor', 'Valor total', ['valor', 'total', 'valor total']],
+  ['situacao', 'Situação', ['situacao', 'status', 'estado']],
+  ['vendedor', 'Vendedor', ['vendedor', 'responsavel', 'atendente', 'tecnico']],
+  ['obs', 'Observações', ['obs', 'observacao', 'observacoes', 'descricao', 'servico']],
+];
+function dataImportada(v) {
+  v = String(v || '').trim();
+  let m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) {
+    const [, d, mes, a] = m.map(Number);
+    if (a < 1990 || a > 2100 || mes < 1 || mes > 12 || d < 1 || d > 31) return '';
+    return `${a}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+  m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m && Number(m[1]) >= 1990 && Number(m[1]) <= 2100 ? m[0] : '';
+}
+function valorImportado(v) {
+  v = String(v || '').replace(/[R$\s]/g, '');
+  if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(v);
+  return isNaN(n) ? 0 : n;
+}
+function situacaoImportada(v) {
+  const s = normalizar(v);
+  if (s.startsWith('cancel') || s.startsWith('recus')) return 'cancelado';
+  if (s.startsWith('finaliz') || s.startsWith('conclu')) return 'finalizado';
+  if (s.startsWith('executad')) return 'executado';
+  if (s.includes('execucao') || s.includes('andamento') || s.startsWith('aprovad')) return 'em_execucao';
+  return 'pendente';
+}
+
+function importarOrcamentos() {
+  abrirModal('Importar orçamentos de planilha', `
+    <div class="importacao">
+      <p>Escolha o arquivo <b>.csv</b> com os orçamentos/ordens. A primeira linha deve ter os nomes das colunas
+        (por exemplo: numero; id - cliente; cliente; emissao; valor; situacao; vendedor).</p>
+      <p class="ajuda">Cada orçamento é ligado ao cliente pelo <b>código do cliente</b>. Clientes que ainda não existirem
+        no cadastro são criados automaticamente com o código e o nome da planilha.</p>
+      <div class="acoes"><label class="btn">Escolher arquivo .csv<input type="file" id="arquivo-csv" accept=".csv,text/csv,.txt" hidden></label></div>
+      <div id="etapa-mapa"></div>
+    </div>`, (raiz) => {
+    $('#arquivo-csv', raiz).addEventListener('change', async (e) => {
+      const arq = e.target.files[0];
+      e.target.value = '';
+      if (!arq) return;
+      try {
+        const linhas = lerCSV(await lerArquivoTexto(arq));
+        if (linhas.length < 2) throw new Error('O arquivo precisa ter a linha de títulos e pelo menos um orçamento.');
+        etapaMapeamentoOrc($('#etapa-mapa', raiz), arq.name, linhas);
+      } catch (err) {
+        avisar('Não foi possível ler o arquivo: ' + err.message, 'erro');
+      }
+    });
+  });
+}
+
+function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
+  const cabecalho = linhas[0].map((c, i) => c.trim() || `Coluna ${i + 1}`);
+  const corpo = linhas.slice(1);
+  const mapa = sugerirColunas(cabecalho, CAMPOS_IMPORTACAO_ORC);
+  const opcoesColunas = (sel) => '<option value="">— não importar —</option>' +
+    cabecalho.map((c, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  el.innerHTML = `
+    <h3>Arquivo: ${esc(nomeArquivo)} (${corpo.length.toLocaleString('pt-BR')} linhas)</h3>
+    <p class="ajuda">Confira qual coluna da planilha vai para cada campo. Já deixei sugeridas as que reconheci.</p>
+    <div class="grade-mapa">
+      ${CAMPOS_IMPORTACAO_ORC.map(([k, rotulo]) => `<label>${rotulo}<select data-campo="${k}">${opcoesColunas(mapa[k])}</select></label>`).join('')}
+    </div>
+    <div id="previa"></div>
+    <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
+      <button type="button" class="btn" id="confirmar-importacao">Importar</button></div>`;
+
+  let r = null;
+  const calcular = () => {
+    $$('[data-campo]', el).forEach((s) => (mapa[s.dataset.campo] = s.value === '' ? undefined : Number(s.value)));
+    const v = (linha, k) => (mapa[k] === undefined ? '' : String(linha[mapa[k]] ?? '').trim());
+    const numerosExistentes = new Set(DB.listar('orcamentos').map((o) => String(o.numero)));
+    const clientes = DB.listar('clientes');
+    const porCodigo = new Map(clientes.filter((c) => c.codigo).map((c) => [normalizar(c.codigo), c]));
+    const porNome = new Map();
+    clientes.forEach((c) => { const k = normalizar(c.nome); if (!porNome.has(k)) porNome.set(k, []); porNome.get(k).push(c); });
+    const novosClientes = new Map(); // chave -> cliente a criar
+    r = { orcamentos: [], jaExistem: [], semNumero: 0, repetidosArquivo: 0, pelaCodigo: 0, peloNome: 0, divergentes: 0,
+      semCliente: 0, datasInvalidas: 0, porSituacao: {}, maior: 0, novosClientes };
+    const vistos = new Set();
+    for (const linha of corpo) {
+      const numero = digitos(v(linha, 'numero'));
+      if (!numero) { r.semNumero++; continue; }
+      if (vistos.has(numero)) { r.repetidosArquivo++; continue; }
+      vistos.add(numero);
+      if (numerosExistentes.has(String(Number(numero)))) { r.jaExistem.push(Number(numero)); continue; }
+      const cod = v(linha, 'codigoCliente').replace(/\.0+$/, '');
+      const nome = v(linha, 'cliente');
+      let cliente = cod ? porCodigo.get(normalizar(cod)) : null;
+      let chaveNovo = null;
+      if (cliente && nome && normalizar(cliente.nome) !== normalizar(nome)) { cliente = null; r.divergentes++; }
+      else if (cliente) r.pelaCodigo++;
+      if (!cliente && nome) {
+        const mesmos = porNome.get(normalizar(nome));
+        if (mesmos && mesmos.length === 1) { cliente = mesmos[0]; r.peloNome++; }
+      }
+      if (!cliente && (nome || cod)) {
+        const codLivre = cod && !porCodigo.has(normalizar(cod));
+        chaveNovo = codLivre ? 'cod:' + normalizar(cod) : 'nome:' + normalizar(nome);
+        if (!novosClientes.has(chaveNovo)) {
+          novosClientes.set(chaveNovo, { nome: nome || `Cliente ${cod}`, tipo: 'PF', ...(codLivre ? { codigo: cod } : {}) });
+        }
+      }
+      if (!cliente && !chaveNovo) r.semCliente++;
+      const data = dataImportada(v(linha, 'emissao'));
+      if (!data) r.datasInvalidas++;
+      const valor = valorImportado(v(linha, 'valor'));
+      const status = situacaoImportada(v(linha, 'situacao'));
+      r.porSituacao[status] = (r.porSituacao[status] || 0) + 1;
+      r.maior = Math.max(r.maior, Number(numero));
+      const vendedor = v(linha, 'vendedor').replace(/^\d+\s+/, '').trim();
+      r.orcamentos.push({
+        numero: Number(numero), clienteId: cliente ? cliente.id : '', chaveNovo, data, validadeDias: 15, status, desconto: 0,
+        itens: valor ? [{ descricao: 'Serviço (importado do sistema anterior)', qtd: 1, valor }] : [],
+        ...(vendedor ? { vendedor } : {}), ...(v(linha, 'obs') ? { condicoes: v(linha, 'obs') } : {}), importado: true,
+      });
+    }
+    const n = r.orcamentos.length;
+    const amostra = r.orcamentos.slice(0, 5);
+    const nomeDe = (o) => (o.clienteId ? (DB.obter('clientes', o.clienteId) || {}).nome : (novosClientes.get(o.chaveNovo) || {}).nome) || '—';
+    $('#previa', el).innerHTML = `
+      <div class="resumo-importacao">
+        <span class="tag verde">${n.toLocaleString('pt-BR')} orçamentos para importar</span>
+        ${r.jaExistem.length ? `<span class="tag amarelo">${r.jaExistem.length} com número que já existe no app (serão pulados)</span>` : ''}
+        ${r.repetidosArquivo ? `<span class="tag amarelo">${r.repetidosArquivo} números repetidos na planilha (pulados)</span>` : ''}
+        ${r.semNumero ? `<span class="tag vermelho">${r.semNumero} sem número (pulados)</span>` : ''}
+      </div>
+      <ul class="lista-ajuda">
+        <li>Situação: ${STATUS_ORC.filter(([s]) => r.porSituacao[s]).map(([s, rot]) => `${rot}: <b>${r.porSituacao[s].toLocaleString('pt-BR')}</b>`).join(' · ') || '—'}</li>
+        <li>Clientes: <b>${r.pelaCodigo.toLocaleString('pt-BR')}</b> orçamentos ligados pelo código${r.peloNome ? `, <b>${r.peloNome}</b> pelo nome` : ''}${novosClientes.size ? `; <b>${novosClientes.size.toLocaleString('pt-BR')} clientes novos</b> serão cadastrados (não estavam no cadastro)` : ''}.</li>
+        ${r.divergentes ? `<li class="atencao">${r.divergentes} orçamentos têm um código de cliente que, no cadastro, pertence a outro nome. Esses foram ligados pelo nome ou a um cliente novo sem código.</li>` : ''}
+        ${r.datasInvalidas ? `<li>${r.datasInvalidas} orçamentos com data de emissão inválida ou vazia (ficarão sem data).</li>` : ''}
+        ${r.jaExistem.length ? `<li class="atencao">Números que já existem no app: ${r.jaExistem.slice(0, 15).join(', ')}${r.jaExistem.length > 15 ? '...' : ''}. Se forem orçamentos de teste, exclua-os antes e importe de novo.</li>` : ''}
+        ${r.maior ? `<li>Depois da importação, os novos orçamentos continuam a partir do nº ${(r.maior + 1).toLocaleString('pt-BR')}.</li>` : ''}
+      </ul>
+      ${amostra.length ? `<b class="rotulo-previa">Prévia:</b>
+      <div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Cliente</th><th>Vendedor</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>
+        ${amostra.map((o) => `<tr><td>${o.numero}</td><td>${o.data ? dataBR(o.data) : '—'}</td><td>${esc(nomeDe(o))}</td><td>${esc(o.vendedor || '')}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td></tr>`).join('')}
+      </tbody></table></div>` : ''}`;
+    const botao = $('#confirmar-importacao', el);
+    botao.disabled = !n;
+    botao.textContent = `Importar ${n.toLocaleString('pt-BR')} orçamento${n === 1 ? '' : 's'}`;
+  };
+  el.addEventListener('change', (e) => { if (e.target.matches('[data-campo]')) calcular(); });
+  $('[data-cancelar]', el).addEventListener('click', fecharModal);
+  $('#confirmar-importacao', el).addEventListener('click', async (e) => {
+    if (mapa.numero === undefined) { avisar('Escolha qual coluna tem o número do orçamento.', 'erro'); return; }
+    const botao = e.target;
+    botao.disabled = true;
+    try {
+      const chaves = [...r.novosClientes.keys()];
+      const idPorChave = new Map();
+      if (chaves.length) {
+        const criados = await DB.adicionarVarios('clientes', chaves.map((k) => r.novosClientes.get(k)),
+          (f, de) => (botao.textContent = `Cadastrando clientes... ${f} de ${de}`));
+        chaves.forEach((k, i) => idPorChave.set(k, criados[i].id));
+        r.novosClientes.clear();
+      }
+      const lista = r.orcamentos.map(({ chaveNovo, ...o }) => ({ ...o, clienteId: o.clienteId || idPorChave.get(chaveNovo) || '' }));
+      await DB.adicionarVarios('orcamentos', lista, (f, de) => (botao.textContent = `Importando... ${f.toLocaleString('pt-BR')} de ${de.toLocaleString('pt-BR')}`));
+      await DB.ajustarNumeracao(r.maior, 0);
+      fecharModal();
+      avisar(`${lista.length.toLocaleString('pt-BR')} orçamentos importados${chaves.length ? ` e ${chaves.length} clientes cadastrados` : ''}.`);
+      render();
+    } catch (err) {
+      avisar('A importação parou: ' + err.message + ' O que já foi gravado foi mantido; importe de novo para continuar (números já importados são pulados).', 'erro');
+      fecharModal();
+      render();
+    }
+  });
+  calcular();
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function formOrcamento(id) {
   const o = id ? DB.obter('orcamentos', id) : { data: hojeISO(), validadeDias: 15, status: 'pendente', itens: [{ qtd: 1 }], pagamento: 'PIX, dinheiro ou cartão' };
   abrirModal(id ? `Editar orçamento nº ${o.numero}` : 'Novo orçamento', `
     <form class="form">
       ${campoCliente(o.clienteId)}
-      ${campo('Data', 'data', o.data, 'date', 'required')}
+      ${campo('Emissão', 'data', o.data, 'date', 'required')}
       ${campo('Validade (dias)', 'validadeDias', o.validadeDias, 'number', 'min="1"')}
       ${editorLinhas(COLS_ORC, o.itens || [])}
       ${campo('Desconto (R$)', 'desconto', o.desconto, 'number', 'step="0.01" min="0"')}
-      <label>Status<select name="status">${opcoes(STATUS_ORC, o.status)}</select></label>
+      <label>Situação<select name="status">${opcoes(STATUS_ORC, statusOrc(o))}</select></label>
+      ${campo('Vendedor', 'vendedor', o.vendedor, 'text', 'list="vendedores"')}
+      <datalist id="vendedores">${[...new Set(DB.listar('orcamentos').map((x) => x.vendedor).filter(Boolean))].slice(0, 50).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
       <div class="full total-linha" id="total"></div>
       ${campo('Forma de pagamento', 'pagamento', o.pagamento, 'text', 'full')}
       ${campo('Garantia / condições', 'condicoes', o.condicoes, 'textarea', 'full')}
@@ -1210,7 +1527,6 @@ function formOrcamento(id) {
       if (!clienteValido(form)) return;
       const dados = lerForm(form);
       const itens = lerLinhas(raiz, COLS_ORC);
-      if (!itens.length) { avisar('Adicione pelo menos um item ao orçamento.', 'erro'); return; }
       enviando($('#salvar', raiz), async () => {
         const numero = id ? o.numero : await DB.proximoNumero('orcamento');
         DB.salvarItem('orcamentos', { ...dados, itens, desconto: num(dados.desconto), id: id || undefined, numero });
@@ -1226,7 +1542,7 @@ function imprimirOrcamento(o) {
   const sub = (o.itens || []).reduce((s, i) => s + num(i.qtd || 1) * num(i.valor), 0);
   imprimir(`<div class="doc">${cabecalhoDoc()}
     <h2>Orçamento nº ${o.numero}</h2>
-    <div class="info"><div><b>Data:</b> ${dataBR(o.data)}</div><div><b>Válido até:</b> ${dataBR(somarDias(o.data, o.validadeDias || 15))}</div></div>
+    <div class="info"><div><b>Emissão:</b> ${o.data ? dataBR(o.data) : '—'}</div><div><b>Válido até:</b> ${o.data ? dataBR(somarDias(o.data, o.validadeDias || 15)) : '—'}</div></div>
     ${blocoCliente(cli)}
     <h3>Serviços</h3>
     <table><thead><tr><th>Descrição</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th class="num">Subtotal</th></tr></thead><tbody>
