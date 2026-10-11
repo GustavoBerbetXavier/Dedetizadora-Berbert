@@ -80,7 +80,10 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
   e-mail, uma senha inicial e marque as áreas que ele pode acessar.
 - **Mudar o acesso ou bloquear** alguém: **Funcionários → Editar acesso**.
 - **Esqueceu a senha**: em "Editar acesso" há o botão **Enviar e-mail para trocar senha**.
-  Cada um também pode trocar a própria senha no botão **Alterar senha** no topo.
+  Cada um também pode trocar a própria senha pelo menu do perfil.
+- **Menu do perfil** (canto inferior esquerdo, para todos): mostra nome e tipo de acesso.
+  Ao clicar, abre **Minha conta** (login, situação, último acesso e áreas liberadas),
+  **Configurações** (só administradores), **Alterar senha** e **Sair**.
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em

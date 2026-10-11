@@ -15,6 +15,7 @@ const DB = (() => {
 
   let sb = null;
   let perfil = null;
+  let usuario = null;
   let dados = vazio();
   let config = {};
   let fila = Promise.resolve();
@@ -64,7 +65,8 @@ const DB = (() => {
 
   async function carregarPerfil() {
     const { data: s } = await sb.auth.getSession();
-    if (!s.session) { perfil = null; return null; }
+    if (!s.session) { perfil = null; usuario = null; return null; }
+    usuario = s.session.user;
     const { data, error } = await sb.from('perfis').select('*').eq('id', s.session.user.id).maybeSingle();
     if (error) throw error;
     perfil = data;
@@ -98,6 +100,7 @@ const DB = (() => {
     pode,
     definirAoErro: (fn) => (aoErro = fn),
     perfil: () => perfil,
+    usuario: () => usuario,
 
     /* ---------- Sessão ---------- */
     async iniciar() {
@@ -113,6 +116,7 @@ const DB = (() => {
     async sair() {
       await sb.auth.signOut();
       perfil = null;
+      usuario = null;
       dados = vazio();
       config = {};
     },

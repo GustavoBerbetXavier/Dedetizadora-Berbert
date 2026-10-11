@@ -30,14 +30,46 @@ body {
 /* Layout */
 [hidden] { display: none !important; }
 #app { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: 56px 1fr; min-height: 100vh; }
-.topo { grid-column: 1 / -1; background: var(--topo); color: #fff; display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+.topo { grid-column: 1 / -1; background: var(--topo); color: #fff; display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  position: sticky; top: 0; z-index: 15; }
 .topo-logo { height: 36px; width: auto; }
-.usuario { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; }
-.btn-topo { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
-.btn-topo:hover { background: rgba(255,255,255,.1); }
 .menu-btn { display: none; background: none; border: 0; color: #fff; cursor: pointer; padding: 4px; }
 .icone { width: 18px; height: 18px; flex-shrink: 0; }
-.menu { background: var(--cartao); border-right: 1px solid var(--borda); padding: 12px 0; }
+.menu { background: var(--cartao); border-right: 1px solid var(--borda); display: flex; flex-direction: column;
+  position: sticky; top: 56px; height: calc(100vh - 56px); align-self: start; }
+#menu-links { flex: 1; overflow-y: auto; padding: 12px 0; }
+
+/* Perfil no canto inferior esquerdo */
+.perfil { position: relative; border-top: 1px solid var(--borda); padding: 10px; }
+.perfil-btn { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: 0; border-radius: 8px;
+  padding: 8px; cursor: pointer; text-align: left; color: var(--texto); font: inherit; }
+.perfil-btn:hover, .perfil.aberto .perfil-btn { background: var(--fundo); }
+.perfil-btn .icone { color: var(--suave); transition: transform .15s; }
+.perfil.aberto .perfil-btn .icone { transform: rotate(180deg); }
+.perfil-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.perfil-txt b, .perfil-cab b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.perfil-txt small, .perfil-cab small { color: var(--suave); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--marca-laranja); color: #fff; display: inline-flex;
+  align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.avatar.grande { width: 48px; height: 48px; font-size: 17px; }
+.perfil-menu { position: absolute; left: 10px; right: 10px; bottom: calc(100% - 4px); background: #fff; border: 1px solid var(--borda);
+  border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.16); padding: 6px; z-index: 30; }
+.perfil-cab { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; border-bottom: 1px solid var(--borda); margin-bottom: 4px; }
+.perfil-cab > div { min-width: 0; display: flex; flex-direction: column; }
+.perfil-menu button { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: 0; border-radius: 6px;
+  padding: 9px 8px; font: inherit; font-size: 14px; color: var(--texto); cursor: pointer; text-align: left; }
+.perfil-menu button .icone { color: var(--suave); }
+.perfil-menu button:hover { background: var(--fundo); }
+.perfil-menu button.sair { color: var(--vermelho); }
+.perfil-menu button.sair .icone { color: var(--vermelho); }
+.conta-topo { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.conta-topo h3 { margin: 0 0 4px; font-size: 18px; }
+.conta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; margin-bottom: 14px; }
+.conta-info .full { grid-column: 1 / -1; }
+.conta-info > div > span:first-child { display: block; font-size: 12px; color: var(--suave); margin-bottom: 4px; }
+.conta-info .tag { margin: 0 4px 4px 0; }
+.conta-info b { font-size: 14px; word-break: break-word; }
+@media (max-width: 600px) { .conta-info { grid-template-columns: 1fr; } }
 .menu a { display: flex; align-items: center; gap: 10px; padding: 11px 18px; color: var(--texto); text-decoration: none; border-left: 4px solid transparent; }
 .menu a .icone { color: var(--suave); }
 .menu a:hover { background: var(--fundo); }
@@ -49,9 +81,8 @@ main { padding: 20px; overflow-x: hidden; }
   #app { grid-template-columns: 1fr; }
   .menu-btn { display: block; }
   .topo-logo { height: 28px; }
-  #usuario-nome { display: none; }
-  .menu { display: none; position: fixed; top: 56px; left: 0; bottom: 0; width: 240px; z-index: 20; box-shadow: 2px 0 10px rgba(0,0,0,.15); }
-  .menu.aberto { display: block; }
+  .menu { display: none; position: fixed; top: 56px; left: 0; bottom: 0; width: 260px; height: auto; align-self: stretch; z-index: 20; box-shadow: 2px 0 10px rgba(0,0,0,.15); }
+  .menu.aberto { display: flex; }
   main { padding: 14px; }
 }
 

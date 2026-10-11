@@ -34,13 +34,14 @@
     <header class="topo">
       <button class="menu-btn" id="menu-btn" aria-label="Abrir menu"></button>
       <img src="img/logo-clara.webp" alt="Berbert Pest Control" class="topo-logo">
-      <div class="usuario">
-        <span id="usuario-nome"></span>
-        <button class="btn-topo" id="btn-senha">Alterar senha</button>
-        <button class="btn-topo" id="btn-sair">Sair</button>
-      </div>
     </header>
-    <nav class="menu" id="menu"></nav>
+    <aside class="menu" id="menu">
+      <nav id="menu-links"></nav>
+      <div class="perfil" id="perfil">
+        <div class="perfil-menu" id="perfil-menu" hidden></div>
+        <button class="perfil-btn" id="perfil-btn" aria-haspopup="true" aria-expanded="false"></button>
+      </div>
+    </aside>
     <main id="view"></main>
   </div>
 

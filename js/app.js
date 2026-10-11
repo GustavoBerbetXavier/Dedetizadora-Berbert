@@ -94,6 +94,10 @@ const ICONES = {
   funcionarios: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  conta: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
+  senha: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  sair: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  seta: '<path d="m18 15-6-6-6 6"/>',
 };
 const icone = (nome) => `<svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[nome]}</svg>`;
 
@@ -190,7 +194,8 @@ const ROTAS = [
   { rota: 'laudos', titulo: 'Laudos', modulo: 'laudos', fn: laudos },
   { rota: 'financeiro', titulo: 'Financeiro', modulo: 'financeiro', fn: financeiro },
   { rota: 'funcionarios', titulo: 'Funcionários', modulo: 'admin', fn: funcionarios },
-  { rota: 'config', titulo: 'Configurações', modulo: 'admin', fn: configuracoes },
+  // Configurações não aparece no menu principal: fica no menu do perfil (canto inferior esquerdo).
+  { rota: 'config', titulo: 'Configurações', modulo: 'admin', fn: configuracoes, foraDoMenu: true },
 ];
 function rotaPermitida(r) {
   if (r.modulo === null) return true;
@@ -198,11 +203,94 @@ function rotaPermitida(r) {
   return DB.pode(r.modulo);
 }
 function montarMenu() {
-  $('#menu').innerHTML = ROTAS.filter(rotaPermitida)
+  $('#menu-links').innerHTML = ROTAS.filter((r) => !r.foraDoMenu && rotaPermitida(r))
     .map((r) => `<a href="#" data-rota="${r.rota}">${icone(r.rota)}<span>${r.titulo}</span></a>`).join('');
   $('#menu-btn').innerHTML = icone('menu');
+  montarPerfil();
+}
+
+/* ---------- Perfil do usuário (canto inferior esquerdo) ---------- */
+function iniciais(nome) {
+  const partes = String(nome || '').trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return '?';
+  return (partes[0][0] + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+function papel(p) {
+  return p.admin ? 'Administrador' : 'Funcionário';
+}
+function montarPerfil() {
   const p = DB.perfil();
-  $('#usuario-nome').textContent = p.nome || p.email;
+  const nome = p.nome || p.email;
+  $('#perfil-btn').innerHTML = `
+    <span class="avatar">${esc(iniciais(nome))}</span>
+    <span class="perfil-txt"><b>${esc(nome)}</b><small>${papel(p)}</small></span>
+    ${icone('seta')}`;
+  $('#perfil-menu').innerHTML = `
+    <div class="perfil-cab">
+      <span class="avatar grande">${esc(iniciais(nome))}</span>
+      <div><b>${esc(nome)}</b><small>${esc(p.email)}</small></div>
+    </div>
+    <button data-perfil="conta">${icone('conta')}Minha conta</button>
+    ${p.admin ? `<button data-perfil="config">${icone('config')}Configurações</button>` : ''}
+    <button data-perfil="senha">${icone('senha')}Alterar senha</button>
+    <button data-perfil="sair" class="sair">${icone('sair')}Sair</button>`;
+}
+function abrirMenuPerfil(abrir) {
+  $('#perfil-menu').hidden = !abrir;
+  $('#perfil-btn').setAttribute('aria-expanded', String(abrir));
+  $('#perfil').classList.toggle('aberto', abrir);
+}
+$('#perfil-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  abrirMenuPerfil($('#perfil-menu').hidden);
+});
+$('#perfil-menu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-perfil]');
+  if (!b) return;
+  abrirMenuPerfil(false);
+  $('#menu').classList.remove('aberto');
+  if (b.dataset.perfil === 'conta') minhaConta();
+  if (b.dataset.perfil === 'config') irPara('config');
+  if (b.dataset.perfil === 'senha') formMinhaSenha();
+  if (b.dataset.perfil === 'sair') sair();
+});
+document.addEventListener('click', (e) => {
+  if (!$('#perfil-menu').hidden && !e.target.closest('#perfil')) abrirMenuPerfil(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#perfil-menu').hidden) abrirMenuPerfil(false);
+});
+
+function dataHoraBR(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+function minhaConta() {
+  const p = DB.perfil();
+  const u = DB.usuario() || {};
+  const nome = p.nome || p.email;
+  abrirModal('Minha conta', `
+    <div class="conta-topo">
+      <span class="avatar grande">${esc(iniciais(nome))}</span>
+      <div><h3>${esc(nome)}</h3><span class="tag ${p.admin ? 'laranja' : 'azul'}">${papel(p)}</span></div>
+    </div>
+    <div class="conta-info">
+      <div><span>E-mail (login)</span><b>${esc(p.email)}</b></div>
+      <div><span>Situação</span><b>${p.ativo ? 'Ativo' : 'Bloqueado'}</b></div>
+      <div><span>Último acesso</span><b>${dataHoraBR(u.last_sign_in_at)}</b></div>
+      <div><span>Conta criada em</span><b>${dataHoraBR(p.criado_em)}</b></div>
+      <div class="full"><span>Áreas que você pode acessar</span><div>${tagsAcesso(p)}</div></div>
+    </div>
+    <p class="ajuda">${p.admin ? 'Você é administrador: pode alterar o acesso dos funcionários em "Funcionários".'
+      : 'Para mudar seu nome ou suas permissões, fale com o administrador do sistema.'}</p>
+    <div class="form-acoes">
+      <button type="button" class="btn sec" id="conta-senha">Alterar senha</button>
+      <button type="button" class="btn perigo" id="conta-sair">Sair</button>
+    </div>`, (raiz) => {
+    $('#conta-senha', raiz).addEventListener('click', formMinhaSenha);
+    $('#conta-sair', raiz).addEventListener('click', () => { fecharModal(); sair(); });
+  });
 }
 // A tela atual fica guardada aqui (e no histórico do navegador), sem aparecer
 // no endereço: a URL continua sempre limpa, mas o botão Voltar funciona.
@@ -942,6 +1030,7 @@ function formFuncionario(p, aoSalvar) {
       enviando($('#salvar', raiz), async () => {
         if (novo) await DB.criarFuncionario({ ...campos, email: d.email, senha: d.senha });
         else await DB.atualizarFuncionario(p.id, campos);
+        if (euMesmo) montarPerfil();
         fecharModal();
         avisar(novo ? 'Funcionário cadastrado. Ele já pode entrar com o e-mail e a senha informados.' : 'Acesso atualizado.');
         aoSalvar();
@@ -1080,14 +1169,14 @@ $('#form-login').addEventListener('submit', async (e) => {
   }
 });
 
-$('#btn-sair').addEventListener('click', async () => {
+async function sair() {
+  abrirMenuPerfil(false);
   await DB.sair();
   rotaAtiva = 'painel';
   try { sessionStorage.removeItem('berbert-rota'); } catch { /* sem armazenamento */ }
   history.replaceState(null, '', location.pathname + location.search);
   mostrarTela('tela-login');
-});
-$('#btn-senha').addEventListener('click', formMinhaSenha);
+}
 
 DB.definirAoErro((msg) => avisar(msg, 'erro'));
 ligarAcoesAgendamento($('#view'));
