@@ -1,0 +1,13 @@
+{
+  "name": "Dedetizadora Berbert",
+  "short_name": "Berbert",
+  "description": "Gestão de clientes, agenda, orçamentos, laudos e financeiro",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3f5f4",
+  "theme_color": "#1f7a4d",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

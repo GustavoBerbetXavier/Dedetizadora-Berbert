@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f7a4d">
+  <title>Dedetizadora Berbert</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topo">
+      <button class="menu-btn" id="menu-btn" aria-label="Abrir menu">☰</button>
+      <h1>Dedetizadora Berbert</h1>
+    </header>
+    <nav class="menu" id="menu">
+      <a href="#/painel" data-rota="painel">🏠 Painel</a>
+      <a href="#/clientes" data-rota="clientes">👥 Clientes</a>
+      <a href="#/agenda" data-rota="agenda">📅 Agenda</a>
+      <a href="#/orcamentos" data-rota="orcamentos">📝 Orçamentos</a>
+      <a href="#/laudos" data-rota="laudos">📄 Laudos</a>
+      <a href="#/financeiro" data-rota="financeiro">💰 Financeiro</a>
+      <a href="#/config" data-rota="config">⚙️ Configurações</a>
+    </nav>
+    <main id="view"></main>
+  </div>
+
+  <div class="modal-fundo" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-topo">
+        <h2 id="modal-titulo"></h2>
+        <button class="fechar" id="modal-fechar" aria-label="Fechar">✕</button>
+      </div>
+      <div id="modal-corpo"></div>
+    </div>
+  </div>
+
+  <div id="impressao"></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
