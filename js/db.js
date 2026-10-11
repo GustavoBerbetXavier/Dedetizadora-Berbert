@@ -17,6 +17,7 @@ const DB = (() => {
   let perfil = null;
   let usuario = null;
   let dados = vazio();
+  let indices = {}; // coleção -> Map(id -> registro), para achar um registro sem percorrer a lista
   let config = {};
   let fila = Promise.resolve();
   let aoErro = (msg) => alert(msg);
@@ -78,20 +79,38 @@ const DB = (() => {
 
   async function carregar() {
     const novos = vazio();
+    // O Supabase devolve no máximo 1000 linhas por consulta: a primeira página informa o
+    // total e as demais são buscadas em paralelo, sempre na mesma ordem (por id).
+    const PAGINA = 1000;
+    const pagina = (col, de, contar) => sb.from(col).select('id, dados', contar ? { count: 'exact' } : undefined)
+      .order('id').range(de, de + PAGINA - 1);
     await Promise.all(COLECOES.filter(podeLer).map(async (col) => {
-      const linhas = [];
-      // O Supabase devolve no máximo 1000 linhas por consulta; busca em páginas.
-      for (let de = 0; ; de += 1000) {
-        const { data, error } = await sb.from(col).select('id, dados').range(de, de + 999);
-        if (error) throw error;
-        linhas.push(...data);
-        if (data.length < 1000) break;
+      const primeira = await pagina(col, 0, true);
+      if (primeira.error) throw primeira.error;
+      const linhas = [...primeira.data];
+      if (primeira.data.length === PAGINA) {
+        if (typeof primeira.count === 'number') {
+          const resto = [];
+          for (let de = PAGINA; de < primeira.count; de += PAGINA) resto.push(pagina(col, de));
+          for (const r of await Promise.all(resto)) {
+            if (r.error) throw r.error;
+            linhas.push(...r.data);
+          }
+        } else {
+          for (let de = PAGINA; ; de += PAGINA) {
+            const r = await pagina(col, de);
+            if (r.error) throw r.error;
+            linhas.push(...r.data);
+            if (r.data.length < PAGINA) break;
+          }
+        }
       }
       novos[col] = linhas.map((l) => ({ ...l.dados, id: l.id }));
     }));
     const { data: cfg, error } = await sb.from('config').select('valor').eq('chave', 'empresa').maybeSingle();
     if (error) throw error;
     dados = novos;
+    indices = {};
     config = (cfg && cfg.valor) || {};
     ultimaCarga = Date.now();
   }
@@ -121,6 +140,7 @@ const DB = (() => {
       perfil = null;
       usuario = null;
       dados = vazio();
+      indices = {};
       config = {};
     },
     async alterarMinhaSenha(senha) {
@@ -132,7 +152,11 @@ const DB = (() => {
 
     /* ---------- Registros ---------- */
     listar: (col) => dados[col].slice(),
-    obter: (col, id) => dados[col].find((x) => x.id === id) || null,
+    obter(col, id) {
+      if (!id) return null;
+      if (!indices[col]) indices[col] = new Map(dados[col].map((x) => [x.id, x]));
+      return indices[col].get(id) || null;
+    },
     salvarItem(col, item) {
       let final;
       if (!item.id) {
@@ -143,12 +167,14 @@ const DB = (() => {
         final = i >= 0 ? { ...dados[col][i], ...item } : item;
         if (i >= 0) dados[col][i] = final; else dados[col].push(final);
       }
+      if (indices[col]) indices[col].set(final.id, final);
       const { id, ...resto } = final;
       enfileirar(() => sb.from(col).upsert({ id, dados: resto, atualizado_em: new Date().toISOString() }));
       return final;
     },
     remover(col, id) {
       dados[col] = dados[col].filter((x) => x.id !== id);
+      if (indices[col]) indices[col].delete(id);
       enfileirar(() => sb.from(col).delete().eq('id', id));
     },
     // Cadastra muitos registros de uma vez (importação de planilha), em lotes.
@@ -160,6 +186,7 @@ const DB = (() => {
         const { error } = await sb.from(col).insert(lote.map(({ id, ...resto }) => ({ id, dados: resto })));
         if (error) throw new Error(traduzirErro(error));
         dados[col].push(...lote);
+        if (indices[col]) lote.forEach((x) => indices[col].set(x.id, x));
         if (aoProgredir) aoProgredir(i + lote.length, novos.length);
       }
       return novos.length;

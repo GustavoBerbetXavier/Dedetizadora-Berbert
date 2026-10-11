@@ -71,6 +71,20 @@ body {
 .conta-info b { font-size: 14px; word-break: break-word; }
 @media (max-width: 600px) { .conta-info { grid-template-columns: 1fr; } }
 
+/* Campo de busca de cliente */
+.linha-cliente { display: flex; gap: 6px; }
+.busca-cliente { position: relative; flex: 1; min-width: 0; }
+.busca-cliente .bc-texto { width: 100%; }
+.busca-cliente.invalido .bc-texto { border-color: var(--vermelho); box-shadow: 0 0 0 2px #f8dedb; }
+.bc-lista { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60; background: #fff; border: 1px solid var(--borda);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.15); max-height: 290px; overflow-y: auto; padding: 4px; }
+.bc-lista button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; background: none; border: 0; border-radius: 6px;
+  padding: 7px 9px; cursor: pointer; text-align: left; font: inherit; color: var(--texto); }
+.bc-lista button b { font-size: 14px; font-weight: 600; }
+.bc-lista button small { font-size: 12px; color: var(--suave); }
+.bc-lista button:hover, .bc-lista button.ativo { background: #eef5e3; }
+.bc-vazio { padding: 10px; font-size: 13px; color: var(--suave); }
+
 /* Importação de planilha */
 .importacao h3 { font-size: 15px; margin: 18px 0 4px; }
 .grade-mapa { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }

@@ -35,10 +35,77 @@ function nomeCliente(id) {
   const c = DB.obter('clientes', id);
   return c ? c.nome : '—';
 }
-function opcoesClientes(selecionado) {
-  const lista = DB.listar('clientes').sort((a, b) => a.nome.localeCompare(b.nome));
-  return '<option value="">Selecione...</option>' +
-    lista.map((c) => `<option value="${c.id}" ${c.id === selecionado ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
+// Campo para escolher o cliente digitando parte do nome, telefone ou CPF/CNPJ.
+// Funciona bem mesmo com dezenas de milhares de clientes (mostra só os 30 primeiros resultados).
+function campoCliente(selecionado, { obrigatorio = true, extra = '' } = {}) {
+  const c = DB.obter('clientes', selecionado);
+  return `<label class="full">Cliente${obrigatorio ? ' *' : ''}<div class="linha-cliente">
+    <div class="busca-cliente" data-obrigatorio="${obrigatorio ? 1 : ''}">
+      <input type="text" class="bc-texto" value="${esc(c ? c.nome : '')}" placeholder="Digite nome, telefone ou CPF/CNPJ..." autocomplete="off">
+      <input type="hidden" name="clienteId" value="${c ? c.id : ''}">
+      <div class="bc-lista" hidden></div>
+    </div>${extra}</div></label>`;
+}
+function ligarCampoCliente(raiz) {
+  const caixa = $('.busca-cliente', raiz);
+  if (!caixa) return;
+  const texto = $('.bc-texto', caixa), oculto = $('[name=clienteId]', caixa), lista = $('.bc-lista', caixa);
+  let indice = null, resultados = [], ativo = -1;
+  const montarIndice = () => DB.listar('clientes').map((c) => ({
+    c, busca: normalizar(c.nome) + ' ' + digitos(c.telefone) + ' ' + digitos(c.documento) + ' ' + normalizar(c.bairro) + ' ' + normalizar(c.cidade),
+  })).sort((a, b) => (a.c.nome || '').localeCompare(b.c.nome || ''));
+  const desenhar = () => {
+    lista.innerHTML = resultados.length ? resultados.map((c, i) => `<button type="button" data-id="${c.id}" class="${i === ativo ? 'ativo' : ''}">
+        <b>${esc(c.nome)}</b><small>${esc([c.telefone, c.bairro, c.cidade].filter(Boolean).join(' · '))}</small></button>`).join('')
+      : '<div class="bc-vazio">Nenhum cliente encontrado.</div>';
+    lista.hidden = false;
+  };
+  const buscar = () => {
+    indice = indice || montarIndice();
+    const termos = normalizar(texto.value).split(' ').filter(Boolean)
+      .map((t) => (/^[\d().\-\/\s]+$/.test(t) ? digitos(t) || t : t));
+    resultados = [];
+    for (const item of indice) {
+      if (termos.every((t) => item.busca.includes(t))) resultados.push(item.c);
+      if (resultados.length >= 30) break;
+    }
+    ativo = resultados.length ? 0 : -1;
+    desenhar();
+  };
+  const escolher = (c) => {
+    oculto.value = c.id;
+    texto.value = c.nome;
+    lista.hidden = true;
+    caixa.classList.remove('invalido');
+  };
+  texto.addEventListener('input', () => { oculto.value = ''; buscar(); });
+  texto.addEventListener('focus', () => { if (!oculto.value) buscar(); });
+  texto.addEventListener('keydown', (e) => {
+    if (lista.hidden && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) buscar();
+    if (e.key === 'ArrowDown') { e.preventDefault(); ativo = Math.min(ativo + 1, resultados.length - 1); desenhar(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); ativo = Math.max(ativo - 1, 0); desenhar(); }
+    else if (e.key === 'Enter' && !lista.hidden && resultados[ativo]) { e.preventDefault(); escolher(resultados[ativo]); }
+    else if (e.key === 'Escape' && !lista.hidden) { e.stopPropagation(); lista.hidden = true; }
+  });
+  lista.addEventListener('mousedown', (e) => {
+    const b = e.target.closest('[data-id]');
+    if (!b) return;
+    e.preventDefault();
+    escolher(DB.obter('clientes', b.dataset.id));
+  });
+  texto.addEventListener('blur', () => setTimeout(() => {
+    lista.hidden = true;
+    if (!oculto.value) texto.value = caixa.dataset.obrigatorio ? texto.value : '';
+  }, 150));
+}
+// Confere se um cliente foi escolhido na lista (o campo oculto não tem validação do navegador).
+function clienteValido(form) {
+  const caixa = $('.busca-cliente', form);
+  if (!caixa || !caixa.dataset.obrigatorio || $('[name=clienteId]', caixa).value) return true;
+  caixa.classList.add('invalido');
+  $('.bc-texto', caixa).focus();
+  avisar('Escolha o cliente na lista: digite parte do nome e clique nele.', 'erro');
+  return false;
 }
 function opcoes(lista, selecionado) {
   return lista.map(([v, r]) => `<option value="${v}" ${v === selecionado ? 'selected' : ''}>${r}</option>`).join('');
@@ -815,8 +882,7 @@ function formAgendamento(id, padrao = {}) {
   const criaCliente = DB.pode('clientes');
   abrirModal(id ? 'Editar agendamento' : 'Novo agendamento', `
     <form class="form">
-      <label class="full">Cliente *<div style="display:flex;gap:6px"><select name="clienteId" required style="flex:1">${opcoesClientes(a.clienteId)}</select>
-        ${criaCliente ? '<button type="button" class="btn sec" id="cli-rapido" title="Cadastrar cliente">+ Novo</button>' : ''}</div></label>
+      ${campoCliente(a.clienteId, { extra: criaCliente ? '<button type="button" class="btn sec" id="cli-rapido" title="Cadastrar cliente">+ Novo</button>' : '' })}
       ${campo('Data *', 'data', a.data, 'date', 'required')}
       ${campo('Hora', 'hora', a.hora, 'time')}
       ${campo('Serviço', 'servico', a.servico, 'text', 'list="servicos" placeholder="Ex.: Dedetização, desratização..."')}
@@ -828,6 +894,7 @@ function formAgendamento(id, padrao = {}) {
       <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn">Salvar</button></div>
     </form>`, (raiz) => {
     const form = $('form', raiz);
+    ligarCampoCliente(raiz);
     $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
     if (criaCliente) {
       $('#cli-rapido', raiz).addEventListener('click', () => {
@@ -837,6 +904,7 @@ function formAgendamento(id, padrao = {}) {
     }
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (!clienteValido(form)) return;
       const dados = lerForm(form);
       DB.salvarItem('agendamentos', { ...a, ...dados, valor: num(dados.valor), id: id || undefined });
       estadoAgenda.dia = dados.data;
@@ -901,7 +969,7 @@ function formOrcamento(id) {
   const o = id ? DB.obter('orcamentos', id) : { data: hojeISO(), validadeDias: 15, status: 'pendente', itens: [{ qtd: 1 }], pagamento: 'PIX, dinheiro ou cartão' };
   abrirModal(id ? `Editar orçamento nº ${o.numero}` : 'Novo orçamento', `
     <form class="form">
-      <label class="full">Cliente *<select name="clienteId" required>${opcoesClientes(o.clienteId)}</select></label>
+      ${campoCliente(o.clienteId)}
       ${campo('Data', 'data', o.data, 'date', 'required')}
       ${campo('Validade (dias)', 'validadeDias', o.validadeDias, 'number', 'min="1"')}
       ${editorLinhas(COLS_ORC, o.itens || [])}
@@ -913,6 +981,7 @@ function formOrcamento(id) {
       <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
     </form>`, (raiz) => {
     const form = $('form', raiz);
+    ligarCampoCliente(raiz);
     const atualizar = () => {
       $('#total', raiz).textContent = 'Total: ' + moeda(totalOrcamento({ itens: lerLinhas(raiz, COLS_ORC), desconto: form.desconto.value }));
     };
@@ -922,6 +991,7 @@ function formOrcamento(id) {
     $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (!clienteValido(form)) return;
       const dados = lerForm(form);
       const itens = lerLinhas(raiz, COLS_ORC);
       if (!itens.length) { avisar('Adicione pelo menos um item ao orçamento.', 'erro'); return; }
@@ -1001,7 +1071,7 @@ function formLaudo(id, padrao = {}) {
   };
   abrirModal(id ? `Editar laudo nº ${l.numero}` : 'Novo laudo / certificado', `
     <form class="form">
-      <label class="full">Cliente *<select name="clienteId" required>${opcoesClientes(l.clienteId)}</select></label>
+      ${campoCliente(l.clienteId)}
       ${campo('Data da execução', 'data', l.data, 'date', 'required')}
       ${campo('Garantia (dias)', 'garantiaDias', l.garantiaDias, 'number', 'min="0"')}
       ${campo('Pragas alvo', 'pragas', l.pragas, 'text', 'full placeholder="Baratas, formigas, ratos, cupins..."')}
@@ -1017,10 +1087,12 @@ function formLaudo(id, padrao = {}) {
       <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
     </form>`, (raiz) => {
     const form = $('form', raiz);
+    ligarCampoCliente(raiz);
     ligarLinhas(raiz, COLS_PROD);
     $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (!clienteValido(form)) return;
       const dados = lerForm(form);
       const produtos = lerLinhas(raiz, COLS_PROD);
       enviando($('#salvar', raiz), async () => {
@@ -1129,16 +1201,18 @@ function formFinanceiro(id, padrao = {}) {
       ${campo('Vencimento *', 'vencimento', f.vencimento, 'date', 'required')}
       ${campo('Categoria', 'categoria', f.categoria, 'text', 'list="cats"')}
       <datalist id="cats">${categorias.map((c) => `<option value="${c}">`).join('')}</datalist>
-      <label>Cliente<select name="clienteId">${opcoesClientes(f.clienteId)}</select></label>
+      ${campoCliente(f.clienteId, { obrigatorio: false })}
       <label>Forma de pagamento<select name="forma">${opcoes([['', '—'], ['pix', 'PIX'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão'], ['boleto', 'Boleto'], ['transferencia', 'Transferência']], f.forma)}</select></label>
       <label class="check"><input type="checkbox" name="pago" ${f.pago ? 'checked' : ''}> Já ${f.tipo === 'despesa' ? 'pago' : 'recebido'}</label>
       ${campo('Observações', 'obs', f.obs, 'textarea', 'full')}
       <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn">Salvar</button></div>
     </form>`, (raiz) => {
     const form = $('form', raiz);
+    ligarCampoCliente(raiz);
     $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (!clienteValido(form)) return;
       const dados = lerForm(form);
       DB.salvarItem('financeiro', {
         ...dados, tipo: f.tipo, valor: num(dados.valor), id: id || undefined,
