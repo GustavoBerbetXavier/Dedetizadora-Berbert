@@ -180,7 +180,7 @@ function blocoCliente(cli) {
   if (!cli) return '';
   return `<h3>Cliente</h3><div class="info">
     <div><b>Nome:</b> ${esc(cli.nome)}</div><div><b>CPF/CNPJ:</b> ${esc(cli.documento)}</div>
-    <div><b>Endereço:</b> ${esc([cli.endereco, cli.bairro].filter(Boolean).join(', '))}</div><div><b>Cidade:</b> ${esc(cli.cidade)}</div>
+    <div><b>Endereço:</b> ${esc([cli.endereco, cli.bairro, cli.cep && 'CEP ' + cli.cep].filter(Boolean).join(', '))}</div><div><b>Cidade:</b> ${esc(cli.cidade)}</div>
     <div><b>Telefone:</b> ${esc(cli.telefone)}</div><div><b>E-mail:</b> ${esc(cli.email)}</div></div>`;
 }
 
@@ -425,13 +425,18 @@ function clientes(el) {
   el.innerHTML = `
     <div class="cabecalho"><h2>Clientes</h2>
       <div class="acoes"><input class="busca" id="busca" placeholder="Buscar por nome, telefone, cidade...">
+      <button class="btn sec" id="importar">Importar planilha</button>
       <button class="btn" id="novo">+ Novo cliente</button></div></div>
     <div class="cartao" style="padding:0"><div id="lista"></div></div>`;
   const desenhar = () => {
     const q = $('#busca', el).value.toLowerCase();
-    const lista = DB.listar('clientes')
+    const todos = DB.listar('clientes')
       .filter((c) => [c.nome, c.telefone, c.cidade, c.bairro, c.documento].join(' ').toLowerCase().includes(q))
-      .sort((a, b) => a.nome.localeCompare(b.nome));
+      .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    // Mostra no máximo 200 por vez para a tela continuar rápida com muitos clientes.
+    const lista = todos.slice(0, 200);
+    const rodape = todos.length > lista.length
+      ? `<div class="vazio">Mostrando ${lista.length} de ${todos.length} clientes. Use a busca para encontrar os demais.</div>` : '';
     $('#lista', el).innerHTML = lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nome</th><th>Telefone</th><th>Bairro / Cidade</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
       ${lista.map((c) => `<tr><td><b>${esc(c.nome)}</b></td><td>${esc(c.telefone)}</td><td>${esc([c.bairro, c.cidade].filter(Boolean).join(' / '))}</td>
         <td>${c.tipo === 'PJ' ? 'Empresa' : 'Pessoa física'}</td>
@@ -441,11 +446,12 @@ function clientes(el) {
           <button class="btn sec peq" data-acao="editar" data-id="${c.id}">Editar</button>
           <button class="btn sec peq" data-acao="excluir" data-id="${c.id}">Excluir</button>
         </div></td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhum cliente encontrado.</div>';
+    </tbody></table></div>${rodape}` : '<div class="vazio">Nenhum cliente encontrado.</div>';
   };
   desenhar();
   $('#busca', el).addEventListener('input', desenhar);
   $('#novo', el).addEventListener('click', () => formCliente(null));
+  $('#importar', el).addEventListener('click', importarClientes);
   $('#lista', el).addEventListener('click', (e) => {
     const b = e.target.closest('[data-acao]');
     if (!b) return;
@@ -457,6 +463,206 @@ function clientes(el) {
       render();
     }
   });
+}
+
+/* ---------- Importação de clientes por planilha (.csv) ---------- */
+const CAMPOS_IMPORTACAO = [
+  ['nome', 'Nome / Razão social *', ['nome', 'cliente', 'razao social', 'nome completo', 'nome do cliente', 'nome cliente', 'razao', 'nome fantasia']],
+  ['documento', 'CPF / CNPJ', ['cpf/cnpj', 'cpf', 'cnpj', 'cpf cnpj', 'cpf ou cnpj', 'documento', 'cnpj/cpf']],
+  ['telefone', 'Telefone / WhatsApp', ['telefone', 'celular', 'whatsapp', 'fone', 'tel', 'telefone 1', 'contato telefonico']],
+  ['telefone2', 'Outro telefone', ['telefone 2', 'telefone2', 'fone 2', 'tel 2', 'telefone fixo', 'fixo']],
+  ['email', 'E-mail', ['email', 'e-mail', 'e mail']],
+  ['endereco', 'Endereço (rua)', ['endereco', 'logradouro', 'rua', 'end']],
+  ['numero', 'Número', ['numero', 'nº', 'n', 'no', 'num']],
+  ['complemento', 'Complemento', ['complemento', 'compl']],
+  ['bairro', 'Bairro', ['bairro']],
+  ['cidade', 'Cidade', ['cidade', 'municipio']],
+  ['uf', 'Estado (UF)', ['uf', 'estado']],
+  ['cep', 'CEP', ['cep']],
+  ['contato', 'Contato responsável', ['contato', 'responsavel', 'pessoa de contato']],
+  ['imovel', 'Tipo de imóvel', ['tipo de imovel', 'imovel', 'tipo imovel', 'tipo do imovel']],
+  ['obs', 'Observações', ['obs', 'observacao', 'observacoes', 'anotacoes', 'notas']],
+];
+const normalizar = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[:.]/g, '').replace(/\s+/g, ' ').trim();
+const digitos = (s) => String(s || '').replace(/\D/g, '');
+
+// Lê o arquivo aceitando UTF-8 ou o formato padrão do Excel no Windows.
+async function lerArquivoTexto(arq) {
+  const buf = await arq.arrayBuffer();
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch {
+    return new TextDecoder('windows-1252').decode(buf);
+  }
+}
+// Lê um CSV separado por ponto e vírgula, vírgula ou tabulação (com suporte a aspas).
+function lerCSV(texto) {
+  texto = texto.replace(/^\uFEFF/, '');
+  const primeira = texto.split(/\r?\n/)[0];
+  const sep = [';', ',', '\t'].map((s) => [s, primeira.split(s).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const linhas = [];
+  let linha = [], valor = '', aspas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (aspas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { valor += '"'; i++; } else aspas = false;
+      } else valor += c;
+    } else if (c === '"') aspas = true;
+    else if (c === sep) { linha.push(valor); valor = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && texto[i + 1] === '\n') i++;
+      linha.push(valor); linhas.push(linha); linha = []; valor = '';
+    } else valor += c;
+  }
+  if (valor || linha.length) { linha.push(valor); linhas.push(linha); }
+  return linhas.filter((l) => l.some((v) => v.trim()));
+}
+// Sugere qual coluna da planilha corresponde a cada campo do cadastro.
+function sugerirColunas(cabecalho) {
+  const cols = cabecalho.map(normalizar);
+  const usadas = new Set();
+  const mapa = {};
+  for (const exato of [true, false]) {
+    for (const [campoNome, , apelidos] of CAMPOS_IMPORTACAO) {
+      if (mapa[campoNome] !== undefined) continue;
+      const i = cols.findIndex((c, idx) => !usadas.has(idx) && apelidos.some((a) =>
+        exato ? c === a : a.length >= 4 && c.startsWith(a)));
+      if (i >= 0) { mapa[campoNome] = i; usadas.add(i); }
+    }
+  }
+  return mapa;
+}
+function montarClienteImportado(linha, mapa) {
+  const v = (k) => (mapa[k] === undefined || mapa[k] === '' ? '' : String(linha[mapa[k]] ?? '').trim());
+  const c = {
+    nome: v('nome'), documento: v('documento'), email: v('email'), bairro: v('bairro'),
+    contato: v('contato'), imovel: v('imovel'), cep: v('cep'),
+  };
+  let endereco = [v('endereco'), v('numero')].filter(Boolean).join(', ');
+  if (v('complemento')) endereco += (endereco ? ' - ' : '') + v('complemento');
+  c.endereco = endereco;
+  c.cidade = [v('cidade'), v('uf')].filter(Boolean).join('/');
+  c.telefone = v('telefone') || v('telefone2');
+  const obs = [v('obs')];
+  if (v('telefone') && v('telefone2')) obs.push('Outro telefone: ' + v('telefone2'));
+  c.obs = obs.filter(Boolean).join('\n');
+  c.tipo = digitos(c.documento).length === 14 ? 'PJ' : 'PF';
+  Object.keys(c).forEach((k) => { if (!c[k]) delete c[k]; });
+  return c;
+}
+function chaveCliente(c) {
+  const doc = digitos(c.documento);
+  if (doc.length >= 11) return 'doc:' + doc;
+  return 'nome:' + normalizar(c.nome) + '|' + digitos(c.telefone);
+}
+
+function importarClientes() {
+  abrirModal('Importar clientes de planilha', `
+    <div class="importacao">
+      <p>Escolha o arquivo <b>.csv</b> com os seus clientes. A primeira linha deve ter os nomes das colunas
+        (por exemplo: Nome, Telefone, CPF/CNPJ, Endereço, Bairro, Cidade).</p>
+      <p class="ajuda">Se a planilha estiver no Excel (.xlsx), abra no Excel e use <b>Arquivo → Salvar como → CSV</b>.
+        No Google Planilhas: <b>Arquivo → Fazer download → CSV</b>.</p>
+      <div class="acoes">
+        <label class="btn">Escolher arquivo .csv<input type="file" id="arquivo-csv" accept=".csv,text/csv,.txt" hidden></label>
+        <button type="button" class="btn sec" id="baixar-modelo">Baixar planilha modelo</button>
+      </div>
+      <div id="etapa-mapa"></div>
+    </div>`, (raiz) => {
+    $('#baixar-modelo', raiz).addEventListener('click', () => {
+      const modelo = '\uFEFFNome;Telefone;CPF/CNPJ;E-mail;Endereço;Número;Bairro;Cidade;UF;CEP;Observações\n' +
+        'Maria da Silva;(11) 99999-0000;123.456.789-00;maria@email.com;Rua das Flores;100;Centro;São Paulo;SP;01000-000;Cliente desde 2020\n';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([modelo], { type: 'text/csv;charset=utf-8' }));
+      a.download = 'modelo-clientes.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+    $('#arquivo-csv', raiz).addEventListener('change', async (e) => {
+      const arq = e.target.files[0];
+      e.target.value = '';
+      if (!arq) return;
+      try {
+        const linhas = lerCSV(await lerArquivoTexto(arq));
+        if (linhas.length < 2) throw new Error('O arquivo precisa ter a linha de títulos e pelo menos um cliente.');
+        etapaMapeamento($('#etapa-mapa', raiz), arq.name, linhas);
+      } catch (err) {
+        avisar('Não foi possível ler o arquivo: ' + err.message, 'erro');
+      }
+    });
+  });
+}
+
+function etapaMapeamento(el, nomeArquivo, linhas) {
+  const cabecalho = linhas[0].map((c, i) => c.trim() || `Coluna ${i + 1}`);
+  const corpo = linhas.slice(1);
+  const mapa = sugerirColunas(cabecalho);
+  const opcoesColunas = (sel) => '<option value="">— não importar —</option>' +
+    cabecalho.map((c, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  el.innerHTML = `
+    <h3>Arquivo: ${esc(nomeArquivo)} (${corpo.length} linhas)</h3>
+    <p class="ajuda">Confira qual coluna da sua planilha vai para cada campo do cadastro. Já deixei sugeridas as que reconheci.</p>
+    <div class="grade-mapa">
+      ${CAMPOS_IMPORTACAO.map(([k, rotulo]) => `<label>${rotulo}<select data-campo="${k}">${opcoesColunas(mapa[k])}</select></label>`).join('')}
+    </div>
+    <label class="check-linha"><input type="checkbox" id="pular-dup" checked>
+      Pular clientes repetidos (mesmo CPF/CNPJ, ou mesmo nome e telefone) que já estão cadastrados ou aparecem duas vezes na planilha</label>
+    <div id="previa"></div>
+    <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
+      <button type="button" class="btn" id="confirmar-importacao">Importar</button></div>`;
+
+  let resultado = { novos: [], semNome: 0, repetidos: 0 };
+  const calcular = () => {
+    $$('[data-campo]', el).forEach((s) => (mapa[s.dataset.campo] = s.value === '' ? undefined : Number(s.value)));
+    const pular = $('#pular-dup', el).checked;
+    const vistos = new Set(DB.listar('clientes').map(chaveCliente));
+    resultado = { novos: [], semNome: 0, repetidos: 0 };
+    for (const linha of corpo) {
+      const c = montarClienteImportado(linha, mapa);
+      if (!c.nome) { resultado.semNome++; continue; }
+      const chave = chaveCliente(c);
+      if (pular && vistos.has(chave)) { resultado.repetidos++; continue; }
+      vistos.add(chave);
+      resultado.novos.push(c);
+    }
+    const amostra = resultado.novos.slice(0, 5);
+    $('#previa', el).innerHTML = `
+      <div class="resumo-importacao">
+        <span class="tag verde">${resultado.novos.length} para importar</span>
+        ${resultado.repetidos ? `<span class="tag amarelo">${resultado.repetidos} repetidos (serão pulados)</span>` : ''}
+        ${resultado.semNome ? `<span class="tag vermelho">${resultado.semNome} sem nome (serão pulados)</span>` : ''}
+      </div>
+      ${amostra.length ? `<b class="rotulo-previa">Prévia dos primeiros clientes:</b>
+      <div class="tabela-wrap"><table><thead><tr><th>Nome</th><th>Telefone</th><th>CPF/CNPJ</th><th>Endereço</th><th>Bairro</th><th>Cidade</th></tr></thead><tbody>
+        ${amostra.map((c) => `<tr><td>${esc(c.nome)}</td><td>${esc(c.telefone)}</td><td>${esc(c.documento)}</td><td>${esc(c.endereco)}</td><td>${esc(c.bairro)}</td><td>${esc(c.cidade)}</td></tr>`).join('')}
+      </tbody></table></div>` : ''}`;
+    const botao = $('#confirmar-importacao', el);
+    botao.disabled = !resultado.novos.length;
+    botao.textContent = `Importar ${resultado.novos.length} cliente${resultado.novos.length === 1 ? '' : 's'}`;
+  };
+  el.addEventListener('change', (e) => { if (e.target.matches('[data-campo], #pular-dup')) calcular(); });
+  $('[data-cancelar]', el).addEventListener('click', fecharModal);
+  $('#confirmar-importacao', el).addEventListener('click', async (e) => {
+    if (mapa.nome === undefined) { avisar('Escolha qual coluna tem o nome do cliente.', 'erro'); return; }
+    const botao = e.target;
+    botao.disabled = true;
+    try {
+      const total = await DB.adicionarVarios('clientes', resultado.novos, (feitos, de) => {
+        botao.textContent = `Importando... ${feitos} de ${de}`;
+      });
+      fecharModal();
+      avisar(`${total} clientes importados com sucesso!`);
+      render();
+    } catch (err) {
+      avisar('A importação parou: ' + err.message + ' Os clientes já gravados foram mantidos.', 'erro');
+      botao.disabled = false;
+      calcular();
+    }
+  });
+  calcular();
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function formCliente(id, aoSalvar) {
@@ -471,6 +677,7 @@ function formCliente(id, aoSalvar) {
       ${campo('Endereço', 'endereco', c.endereco, 'text', 'full')}
       ${campo('Bairro', 'bairro', c.bairro)}
       ${campo('Cidade', 'cidade', c.cidade)}
+      ${campo('CEP', 'cep', c.cep)}
       ${campo('Contato responsável', 'contato', c.contato)}
       ${campo('Tipo de imóvel', 'imovel', c.imovel, 'text', 'placeholder="Casa, apartamento, restaurante..."')}
       ${campo('Observações', 'obs', c.obs, 'textarea', 'full')}

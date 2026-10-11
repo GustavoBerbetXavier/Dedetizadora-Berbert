@@ -70,6 +70,17 @@ body {
 .conta-info .tag { margin: 0 4px 4px 0; }
 .conta-info b { font-size: 14px; word-break: break-word; }
 @media (max-width: 600px) { .conta-info { grid-template-columns: 1fr; } }
+
+/* Importação de planilha */
+.importacao h3 { font-size: 15px; margin: 18px 0 4px; }
+.grade-mapa { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }
+.grade-mapa label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--suave); }
+.grade-mapa select { padding: 8px; border: 1px solid var(--borda); border-radius: 7px; font-size: 14px; background: #fff; color: var(--texto); }
+.check-linha { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-bottom: 12px; }
+.check-linha input { margin-top: 3px; }
+.resumo-importacao { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.resumo-importacao .tag { font-size: 13px; padding: 4px 10px; }
+.rotulo-previa { display: block; font-size: 13px; margin-bottom: 6px; }
 .menu a { display: flex; align-items: center; gap: 10px; padding: 11px 18px; color: var(--texto); text-decoration: none; border-left: 4px solid transparent; }
 .menu a .icone { color: var(--suave); }
 .menu a:hover { background: var(--fundo); }

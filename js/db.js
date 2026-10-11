@@ -27,8 +27,11 @@ const DB = (() => {
     COLECOES.forEach((c) => (base[c] = []));
     return base;
   }
+  let contadorId = 0;
   function uid() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    contadorId += 1;
+    return Date.now().toString(36) + (contadorId).toString(36) + Math.random().toString(36).slice(2, 10);
   }
   function configurado() {
     const c = window.BERBERT_CONFIG || {};
@@ -147,6 +150,19 @@ const DB = (() => {
     remover(col, id) {
       dados[col] = dados[col].filter((x) => x.id !== id);
       enfileirar(() => sb.from(col).delete().eq('id', id));
+    },
+    // Cadastra muitos registros de uma vez (importação de planilha), em lotes.
+    async adicionarVarios(col, itens, aoProgredir) {
+      const agora = new Date().toISOString();
+      const novos = itens.map((i) => ({ ...i, id: uid(), criadoEm: agora }));
+      for (let i = 0; i < novos.length; i += 500) {
+        const lote = novos.slice(i, i + 500);
+        const { error } = await sb.from(col).insert(lote.map(({ id, ...resto }) => ({ id, dados: resto })));
+        if (error) throw new Error(traduzirErro(error));
+        dados[col].push(...lote);
+        if (aoProgredir) aoProgredir(i + lote.length, novos.length);
+      }
+      return novos.length;
     },
     async proximoNumero(tipo) {
       const { data, error } = await sb.rpc('proximo_numero', { tipo });

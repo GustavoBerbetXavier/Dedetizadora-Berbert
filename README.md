@@ -84,6 +84,11 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
 - **Menu do perfil** (canto inferior esquerdo, para todos): mostra nome e tipo de acesso.
   Ao clicar, abre **Minha conta** (login, situação, último acesso e áreas liberadas),
   **Configurações** (só administradores), **Alterar senha** e **Sair**.
+- **Importar clientes de uma planilha**: em **Clientes → Importar planilha**, escolha o
+  arquivo `.csv` (do Excel: *Salvar como → CSV*; do Google Planilhas: *Download → CSV*).
+  O sistema reconhece as colunas sozinho (Nome, Telefone, CPF/CNPJ, Endereço, Número,
+  Bairro, Cidade, UF, CEP...), mostra uma prévia e pula clientes repetidos. Há também
+  um botão para baixar uma planilha modelo.
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em
