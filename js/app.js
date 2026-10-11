@@ -199,13 +199,28 @@ function rotaPermitida(r) {
 }
 function montarMenu() {
   $('#menu').innerHTML = ROTAS.filter(rotaPermitida)
-    .map((r) => `<a href="#/${r.rota}" data-rota="${r.rota}">${icone(r.rota)}<span>${r.titulo}</span></a>`).join('');
+    .map((r) => `<a href="#" data-rota="${r.rota}">${icone(r.rota)}<span>${r.titulo}</span></a>`).join('');
   $('#menu-btn').innerHTML = icone('menu');
   const p = DB.perfil();
   $('#usuario-nome').textContent = p.nome || p.email;
 }
+// A tela atual fica guardada aqui (e no histórico do navegador), sem aparecer
+// no endereço: a URL continua sempre limpa, mas o botão Voltar funciona.
+let rotaAtiva = (() => {
+  if (location.hash.startsWith('#/')) return location.hash.slice(2).split('?')[0];
+  try { return sessionStorage.getItem('berbert-rota') || 'painel'; } catch { return 'painel'; }
+})();
+if (location.hash.startsWith('#/')) history.replaceState({ rota: rotaAtiva }, '', location.pathname + location.search);
+
 function rotaAtual() {
-  return (location.hash.replace('#/', '') || 'painel').split('?')[0];
+  return rotaAtiva;
+}
+function irPara(rota, substituir = false) {
+  rotaAtiva = rota;
+  try { sessionStorage.setItem('berbert-rota', rota); } catch { /* sem armazenamento */ }
+  history[substituir ? 'replaceState' : 'pushState']({ rota }, '', location.pathname + location.search);
+  render();
+  atualizarDados();
 }
 function render() {
   let r = ROTAS.find((x) => x.rota === rotaAtual()) || ROTAS[0];
@@ -225,10 +240,19 @@ async function atualizarDados() {
     avisar('Não foi possível atualizar os dados: ' + DB.traduzirErro(e), 'erro');
   }
 }
-window.addEventListener('hashchange', () => {
-  if ($('#app').hidden) return;
+window.addEventListener('popstate', (e) => {
+  if ($('#app').hidden || !e.state || !e.state.rota) return;
+  rotaAtiva = e.state.rota;
+  try { sessionStorage.setItem('berbert-rota', rotaAtiva); } catch { /* sem armazenamento */ }
   render();
   atualizarDados();
+});
+$('#menu').addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-rota]');
+  if (!a) return;
+  e.preventDefault();
+  if (a.dataset.rota !== rotaAtiva) irPara(a.dataset.rota);
+  else $('#menu').classList.remove('aberto');
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarDados(); });
 $('#menu-btn').addEventListener('click', () => $('#menu').classList.toggle('aberto'));
@@ -708,7 +732,7 @@ function formLaudo(id, padrao = {}) {
         const numero = id ? l.numero : await DB.proximoNumero('laudo');
         DB.salvarItem('laudos', { ...dados, produtos, id: id || undefined, numero });
         fecharModal();
-        if (rotaAtual() === 'laudos') render(); else location.hash = '#/laudos';
+        if (rotaAtual() === 'laudos') render(); else irPara('laudos');
       });
     });
   });
@@ -826,7 +850,7 @@ function formFinanceiro(id, padrao = {}) {
         dataPagamento: dados.pago ? (f.dataPagamento || hojeISO()) : '',
       });
       fecharModal();
-      if (rotaAtual() === 'financeiro') render(); else location.hash = '#/financeiro';
+      if (rotaAtual() === 'financeiro') render(); else irPara('financeiro');
     });
   });
 }
@@ -1030,6 +1054,7 @@ async function entrarNoApp(perfil) {
   await DB.carregar();
   montarMenu();
   mostrarTela('app');
+  history.replaceState({ rota: rotaAtiva }, '', location.pathname + location.search);
   render();
 }
 
@@ -1057,7 +1082,9 @@ $('#form-login').addEventListener('submit', async (e) => {
 
 $('#btn-sair').addEventListener('click', async () => {
   await DB.sair();
-  history.replaceState(null, '', location.pathname);
+  rotaAtiva = 'painel';
+  try { sessionStorage.removeItem('berbert-rota'); } catch { /* sem armazenamento */ }
+  history.replaceState(null, '', location.pathname + location.search);
   mostrarTela('tela-login');
 });
 $('#btn-senha').addEventListener('click', formMinhaSenha);
