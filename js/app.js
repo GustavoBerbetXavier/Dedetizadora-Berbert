@@ -1,5 +1,7 @@
-// Sistema de gestão - Dedetizadora Berbert
-// Módulos: Painel, Clientes, Agenda, Orçamentos, Laudos, Financeiro e Configurações.
+// Sistema de gestão - Berbert Pest Control
+// Módulos: Painel, Clientes, Agenda, Orçamentos, Laudos, Financeiro,
+// Funcionários e Configurações. O acesso de cada funcionário é definido
+// pelo administrador e verificado também pelo banco de dados.
 
 /* ---------- Utilitários ---------- */
 const $ = (sel, raiz = document) => raiz.querySelector(sel);
@@ -15,8 +17,7 @@ const num = (v) => {
   return isNaN(n) ? 0 : n;
 };
 function hojeISO() {
-  const d = new Date();
-  return isoData(d);
+  return isoData(new Date());
 }
 function isoData(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -49,16 +50,52 @@ function lerForm(form) {
   return obj;
 }
 function campo(rotulo, nome, valor = '', tipo = 'text', extra = '') {
-  if (tipo === 'textarea') {
-    return `<label class="${extra.includes('full') ? 'full' : ''}">${rotulo}<textarea name="${nome}">${esc(valor)}</textarea></label>`;
-  }
   const cls = extra.includes('full') ? 'full' : '';
+  if (tipo === 'textarea') {
+    return `<label class="${cls}">${rotulo}<textarea name="${nome}">${esc(valor)}</textarea></label>`;
+  }
   const attrs = extra.replace('full', '');
   return `<label class="${cls}">${rotulo}<input type="${tipo}" name="${nome}" value="${esc(valor)}" ${attrs}></label>`;
 }
 function confirmar(msg) {
   return window.confirm(msg);
 }
+function avisar(msg, tipo = 'ok') {
+  const el = $('#aviso-flutuante');
+  el.textContent = msg;
+  el.className = tipo;
+  el.hidden = false;
+  clearTimeout(avisar.t);
+  avisar.t = setTimeout(() => (el.hidden = true), tipo === 'erro' ? 6000 : 2500);
+}
+// Executa uma ação assíncrona de um formulário, travando o botão enquanto salva.
+async function enviando(botao, acao) {
+  const texto = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = 'Salvando...';
+  try {
+    await acao();
+  } catch (e) {
+    avisar(e.message || String(e), 'erro');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = texto;
+  }
+}
+
+/* ---------- Ícones (SVG) ---------- */
+const ICONES = {
+  painel: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  clientes: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  agenda: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  orcamentos: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>',
+  laudos: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+  financeiro: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  funcionarios: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+  config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+};
+const icone = (nome) => `<svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[nome]}</svg>`;
 
 /* ---------- Modal ---------- */
 function abrirModal(titulo, html, aoMontar) {
@@ -66,7 +103,7 @@ function abrirModal(titulo, html, aoMontar) {
   $('#modal-corpo').innerHTML = html;
   $('#modal').hidden = false;
   if (aoMontar) aoMontar($('#modal-corpo'));
-  const primeiro = $('#modal-corpo input, #modal-corpo select');
+  const primeiro = $('#modal-corpo input:not([type=checkbox]):not([disabled]), #modal-corpo select');
   if (primeiro) primeiro.focus();
 }
 function fecharModal() {
@@ -88,7 +125,7 @@ function editorLinhas(colunas, itens) {
 function linhaHTML(colunas, item) {
   return '<tr>' + colunas.map((c) =>
     `<td><input data-col="${c.nome}" type="${c.tipo || 'text'}" ${c.tipo === 'number' ? 'step="0.01" min="0"' : ''} value="${esc(item[c.nome] ?? '')}"></td>`
-  ).join('') + '<td><button type="button" class="btn sec peq rm-linha" title="Remover">✕</button></td></tr>';
+  ).join('') + '<td><button type="button" class="btn sec peq rm-linha" title="Remover">&times;</button></td></tr>';
 }
 function ligarLinhas(raiz, colunas, aoMudar = () => {}) {
   const tbody = $('.linhas tbody', raiz);
@@ -117,17 +154,21 @@ function lerLinhas(raiz, colunas) {
 
 /* ---------- Impressão ---------- */
 function imprimir(html) {
-  $('#impressao').innerHTML = html;
+  const area = $('#impressao');
+  area.innerHTML = html;
   document.body.classList.add('imprimindo');
-  setTimeout(() => window.print(), 50);
+  // Espera a logo carregar antes de abrir a impressão.
+  const imagens = $$('img', area).filter((img) => !img.complete);
+  Promise.all(imagens.map((img) => new Promise((ok) => { img.onload = img.onerror = ok; })))
+    .then(() => setTimeout(() => window.print(), 50));
 }
 window.addEventListener('afterprint', () => document.body.classList.remove('imprimindo'));
 
 function cabecalhoDoc() {
   const c = DB.config();
   return `<div class="doc-topo">
-    <div><h1>${esc(c.empresa || 'Dedetizadora Berbert')}</h1>
-      <div class="dados">${c.cnpj ? 'CNPJ: ' + esc(c.cnpj) + '<br>' : ''}${c.licenca ? 'Licença Sanitária: ' + esc(c.licenca) : ''}</div></div>
+    <div><img src="img/logo-escura.webp" alt="Berbert Pest Control" class="doc-logo">
+      <div class="dados">${esc(c.empresa || 'Dedetizadora Berbert')}${c.cnpj ? ' — CNPJ: ' + esc(c.cnpj) : ''}${c.licenca ? '<br>Licença Sanitária: ' + esc(c.licenca) : ''}</div></div>
     <div class="dados" style="text-align:right">${esc(c.endereco || '')}<br>${esc(c.telefone || '')}<br>${esc(c.email || '')}</div>
   </div>`;
 }
@@ -139,17 +180,57 @@ function blocoCliente(cli) {
     <div><b>Telefone:</b> ${esc(cli.telefone)}</div><div><b>E-mail:</b> ${esc(cli.email)}</div></div>`;
 }
 
-/* ---------- Roteamento ---------- */
-const rotas = { painel, clientes, agenda, orcamentos, laudos, financeiro, config: configuracoes };
-
-function render() {
-  const rota = (location.hash.replace('#/', '') || 'painel').split('?')[0];
-  const fn = rotas[rota] || painel;
-  $$('.menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.rota === rota));
-  $('#menu').classList.remove('aberto');
-  fn($('#view'));
+/* ---------- Menu e roteamento ---------- */
+// modulo: permissão exigida (null = todos; 'admin' = só administrador)
+const ROTAS = [
+  { rota: 'painel', titulo: 'Painel', modulo: null, fn: painel },
+  { rota: 'clientes', titulo: 'Clientes', modulo: 'clientes', fn: clientes },
+  { rota: 'agenda', titulo: 'Agenda', modulo: 'agenda', fn: agenda },
+  { rota: 'orcamentos', titulo: 'Orçamentos', modulo: 'orcamentos', fn: orcamentos },
+  { rota: 'laudos', titulo: 'Laudos', modulo: 'laudos', fn: laudos },
+  { rota: 'financeiro', titulo: 'Financeiro', modulo: 'financeiro', fn: financeiro },
+  { rota: 'funcionarios', titulo: 'Funcionários', modulo: 'admin', fn: funcionarios },
+  { rota: 'config', titulo: 'Configurações', modulo: 'admin', fn: configuracoes },
+];
+function rotaPermitida(r) {
+  if (r.modulo === null) return true;
+  if (r.modulo === 'admin') return Boolean(DB.perfil() && DB.perfil().admin);
+  return DB.pode(r.modulo);
 }
-window.addEventListener('hashchange', render);
+function montarMenu() {
+  $('#menu').innerHTML = ROTAS.filter(rotaPermitida)
+    .map((r) => `<a href="#/${r.rota}" data-rota="${r.rota}">${icone(r.rota)}<span>${r.titulo}</span></a>`).join('');
+  $('#menu-btn').innerHTML = icone('menu');
+  const p = DB.perfil();
+  $('#usuario-nome').textContent = p.nome || p.email;
+}
+function rotaAtual() {
+  return (location.hash.replace('#/', '') || 'painel').split('?')[0];
+}
+function render() {
+  let r = ROTAS.find((x) => x.rota === rotaAtual()) || ROTAS[0];
+  if (!rotaPermitida(r)) r = ROTAS[0];
+  $$('.menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.rota === r.rota));
+  $('#menu').classList.remove('aberto');
+  r.fn($('#view'));
+}
+// Busca alterações feitas por outros funcionários (ao trocar de tela ou voltar ao app).
+async function atualizarDados() {
+  if (!DB.perfil() || $('#app').hidden || DB.carregadoHa() < 20000) return;
+  const rota = rotaAtual();
+  try {
+    await DB.carregar();
+    if (rota === rotaAtual() && $('#modal').hidden) render();
+  } catch (e) {
+    avisar('Não foi possível atualizar os dados: ' + DB.traduzirErro(e), 'erro');
+  }
+}
+window.addEventListener('hashchange', () => {
+  if ($('#app').hidden) return;
+  render();
+  atualizarDados();
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarDados(); });
 $('#menu-btn').addEventListener('click', () => $('#menu').classList.toggle('aberto'));
 
 /* ---------- Status / tags ---------- */
@@ -168,6 +249,9 @@ function painel(el) {
   const hoje = hojeISO();
   const em7 = somarDias(hoje, 7);
   const mes = hoje.slice(0, 7);
+  const p = DB.perfil();
+  const verAgenda = DB.pode('agenda');
+  const verFin = DB.pode('financeiro');
   const ags = DB.listar('agendamentos');
   const fin = DB.listar('financeiro');
   const agHoje = ags.filter((a) => a.data === hoje && a.status !== 'cancelado');
@@ -179,27 +263,30 @@ function painel(el) {
     .reduce((s, f) => s + (f.tipo === 'receita' ? 1 : -1) * num(f.valor), 0);
   const orcPend = DB.listar('orcamentos').filter((o) => o.status === 'pendente').length;
 
+  const kpis = [];
+  if (verAgenda) kpis.push(['Serviços hoje', agHoje.length]);
+  kpis.push(['Clientes cadastrados', DB.listar('clientes').length]);
+  if (DB.pode('orcamentos')) kpis.push(['Orçamentos pendentes', orcPend]);
+  if (verFin) {
+    kpis.push(['A receber', moeda(aReceber)]);
+    kpis.push(['Saldo do mês (pago)', `<span style="color:${saldoMes < 0 ? 'var(--vermelho)' : 'inherit'}">${moeda(saldoMes)}</span>`]);
+  }
+
   el.innerHTML = `
-    <div class="cabecalho"><h2>Painel</h2>
+    <div class="cabecalho"><h2>Olá, ${esc((p.nome || '').split(' ')[0] || 'bem-vindo')}</h2>
       <div class="acoes">
-        <button class="btn" id="novo-ag">+ Agendamento</button>
-        <button class="btn sec" id="novo-cli">+ Cliente</button>
+        ${verAgenda ? '<button class="btn" id="novo-ag">+ Agendamento</button>' : ''}
+        ${DB.pode('clientes') ? '<button class="btn sec" id="novo-cli">+ Cliente</button>' : ''}
       </div></div>
-    <div class="grade-kpi">
-      <div class="kpi"><div class="rotulo">Serviços hoje</div><div class="valor">${agHoje.length}</div></div>
-      <div class="kpi"><div class="rotulo">Clientes cadastrados</div><div class="valor">${DB.listar('clientes').length}</div></div>
-      <div class="kpi"><div class="rotulo">Orçamentos pendentes</div><div class="valor">${orcPend}</div></div>
-      <div class="kpi"><div class="rotulo">A receber</div><div class="valor">${moeda(aReceber)}</div></div>
-      <div class="kpi"><div class="rotulo">Saldo do mês (pago)</div><div class="valor" style="color:${saldoMes < 0 ? 'var(--vermelho)' : 'inherit'}">${moeda(saldoMes)}</div></div>
-    </div>
-    <div class="cartao"><h3>Próximos 7 dias</h3>${tabelaAgendamentos(proximos, false)}</div>
-    <div class="cartao"><h3>Contas vencidas</h3>
+    <div class="grade-kpi">${kpis.map(([r, v]) => `<div class="kpi"><div class="rotulo">${r}</div><div class="valor">${v}</div></div>`).join('')}</div>
+    ${verAgenda ? `<div class="cartao"><h3>Próximos 7 dias</h3>${tabelaAgendamentos(proximos, false)}</div>` : ''}
+    ${verFin ? `<div class="cartao"><h3>Contas vencidas</h3>
       ${vencidas.length ? `<div class="tabela-wrap"><table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Tipo</th><th class="num">Valor</th></tr></thead><tbody>
         ${vencidas.map((f) => `<tr><td>${dataBR(f.vencimento)}</td><td>${esc(f.descricao)}</td><td>${f.tipo === 'receita' ? 'A receber' : 'A pagar'}</td><td class="num">${moeda(f.valor)}</td></tr>`).join('')}
-      </tbody></table></div>` : '<div class="vazio">Nenhuma conta vencida 🎉</div>'}
-    </div>`;
-  $('#novo-ag', el).addEventListener('click', () => formAgendamento(null, { data: hoje }));
-  $('#novo-cli', el).addEventListener('click', () => formCliente(null));
+      </tbody></table></div>` : '<div class="vazio">Nenhuma conta vencida.</div>'}
+    </div>` : ''}`;
+  if (verAgenda) $('#novo-ag', el).addEventListener('click', () => formAgendamento(null, { data: hoje }));
+  if (DB.pode('clientes')) $('#novo-cli', el).addEventListener('click', () => formCliente(null));
 }
 
 function tabelaAgendamentos(lista, comAcoes = true) {
@@ -210,8 +297,8 @@ function tabelaAgendamentos(lista, comAcoes = true) {
       <td>${esc(a.servico)}</td><td>${esc(a.tecnico)}</td><td>${tag(a.status, STATUS_AG)}</td>
       ${comAcoes ? `<td><div class="acoes">
         ${a.status === 'agendado' ? `<button class="btn peq" data-ag="concluir" data-id="${a.id}">Concluir</button>` : ''}
-        <button class="btn sec peq" data-ag="laudo" data-id="${a.id}">Laudo</button>
-        <button class="btn sec peq" data-ag="receita" data-id="${a.id}">Lançar $</button>
+        ${DB.pode('laudos') ? `<button class="btn sec peq" data-ag="laudo" data-id="${a.id}">Laudo</button>` : ''}
+        ${DB.pode('financeiro') ? `<button class="btn sec peq" data-ag="receita" data-id="${a.id}">Lançar $</button>` : ''}
         <button class="btn sec peq" data-ag="editar" data-id="${a.id}">Editar</button>
         <button class="btn sec peq" data-ag="excluir" data-id="${a.id}">Excluir</button>
       </div></td>` : ''}
@@ -299,15 +386,15 @@ function historicoCliente(id) {
   abrirModal(`Histórico — ${c.nome}`, `
     <p>${esc(c.telefone)} · ${esc([c.endereco, c.bairro, c.cidade].filter(Boolean).join(', '))}</p>
     <div class="grade-kpi">
-      <div class="kpi"><div class="rotulo">Serviços</div><div class="valor">${ags.length}</div></div>
-      <div class="kpi"><div class="rotulo">Total pago</div><div class="valor">${moeda(pago)}</div></div>
-      <div class="kpi"><div class="rotulo">Em aberto</div><div class="valor">${moeda(aberto)}</div></div>
+      ${DB.pode('agenda') ? `<div class="kpi"><div class="rotulo">Serviços</div><div class="valor">${ags.length}</div></div>` : ''}
+      ${DB.pode('financeiro') ? `<div class="kpi"><div class="rotulo">Total pago</div><div class="valor">${moeda(pago)}</div></div>
+      <div class="kpi"><div class="rotulo">Em aberto</div><div class="valor">${moeda(aberto)}</div></div>` : ''}
     </div>
-    <h3>Agendamentos</h3>${tabelaAgendamentos(ags, false)}
-    <h3>Orçamentos</h3>${orcs.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
-      ${orcs.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum orçamento.</div>'}
-    <h3>Laudos</h3>${lds.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th>Pragas</th><th>Garantia até</th></tr></thead><tbody>
-      ${lds.map((l) => `<tr><td>${l.numero}</td><td>${dataBR(l.data)}</td><td>${esc(l.pragas)}</td><td>${l.garantiaDias ? dataBR(somarDias(l.data, l.garantiaDias)) : '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum laudo.</div>'}
+    ${DB.pode('agenda') ? `<h3>Agendamentos</h3>${tabelaAgendamentos(ags, false)}` : ''}
+    ${DB.pode('orcamentos') ? `<h3>Orçamentos</h3>${orcs.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
+      ${orcs.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum orçamento.</div>'}` : ''}
+    ${DB.pode('laudos') ? `<h3>Laudos</h3>${lds.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th>Pragas</th><th>Garantia até</th></tr></thead><tbody>
+      ${lds.map((l) => `<tr><td>${l.numero}</td><td>${dataBR(l.data)}</td><td>${esc(l.pragas)}</td><td>${l.garantiaDias ? dataBR(somarDias(l.data, l.garantiaDias)) : '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum laudo.</div>'}` : ''}
   `);
 }
 
@@ -321,9 +408,8 @@ function agenda(el) {
   const primeiro = new Date(ano, mes, 1);
   const inicio = new Date(ano, mes, 1 - primeiro.getDay());
   const hoje = hojeISO();
-  const ags = DB.listar('agendamentos');
   const porDia = {};
-  ags.forEach((a) => (porDia[a.data] = porDia[a.data] || []).push(a));
+  DB.listar('agendamentos').forEach((a) => (porDia[a.data] = porDia[a.data] || []).push(a));
   Object.values(porDia).forEach((l) => l.sort((a, b) => (a.hora || '').localeCompare(b.hora || '')));
 
   let dias = '';
@@ -343,7 +429,7 @@ function agenda(el) {
   el.innerHTML = `
     <div class="cabecalho"><h2>Agenda</h2>
       <div class="cal-nav">
-        <button class="btn sec" id="ant">‹</button><strong>${tituloMes}</strong><button class="btn sec" id="prox">›</button>
+        <button class="btn sec" id="ant" aria-label="Mês anterior">&lsaquo;</button><strong>${tituloMes}</strong><button class="btn sec" id="prox" aria-label="Próximo mês">&rsaquo;</button>
         <button class="btn sec" id="hoje">Hoje</button>
         <button class="btn" id="novo">+ Agendar</button>
       </div></div>
@@ -407,10 +493,11 @@ function ligarAcoesAgendamento(el) {
 
 function formAgendamento(id, padrao = {}) {
   const a = id ? DB.obter('agendamentos', id) : { status: 'agendado', hora: '08:00', ...padrao };
+  const criaCliente = DB.pode('clientes');
   abrirModal(id ? 'Editar agendamento' : 'Novo agendamento', `
     <form class="form">
       <label class="full">Cliente *<div style="display:flex;gap:6px"><select name="clienteId" required style="flex:1">${opcoesClientes(a.clienteId)}</select>
-        <button type="button" class="btn sec" id="cli-rapido" title="Cadastrar cliente">+ Novo</button></div></label>
+        ${criaCliente ? '<button type="button" class="btn sec" id="cli-rapido" title="Cadastrar cliente">+ Novo</button>' : ''}</div></label>
       ${campo('Data *', 'data', a.data, 'date', 'required')}
       ${campo('Hora', 'hora', a.hora, 'time')}
       ${campo('Serviço', 'servico', a.servico, 'text', 'list="servicos" placeholder="Ex.: Dedetização, desratização..."')}
@@ -423,10 +510,12 @@ function formAgendamento(id, padrao = {}) {
     </form>`, (raiz) => {
     const form = $('form', raiz);
     $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
-    $('#cli-rapido', raiz).addEventListener('click', () => {
-      const rascunho = lerForm(form);
-      formCliente(null, (cli) => formAgendamento(id, { ...rascunho, clienteId: cli.id }));
-    });
+    if (criaCliente) {
+      $('#cli-rapido', raiz).addEventListener('click', () => {
+        const rascunho = lerForm(form);
+        formCliente(null, (cli) => formAgendamento(id, { ...rascunho, clienteId: cli.id }));
+      });
+    }
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const dados = lerForm(form);
@@ -456,6 +545,7 @@ function totalOrcamento(o) {
 
 function orcamentos(el) {
   const lista = DB.listar('orcamentos').sort((a, b) => b.numero - a.numero);
+  const agendar = DB.pode('agenda');
   el.innerHTML = `
     <div class="cabecalho"><h2>Orçamentos</h2><button class="btn" id="novo">+ Novo orçamento</button></div>
     <div class="cartao" style="padding:0">${lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th class="num">Total</th><th>Status</th><th>Ações</th></tr></thead><tbody>
@@ -463,7 +553,7 @@ function orcamentos(el) {
         <td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td>
         <td><div class="acoes">
           <button class="btn peq" data-acao="imprimir" data-id="${o.id}">Imprimir / PDF</button>
-          ${o.status === 'pendente' ? `<button class="btn sec peq" data-acao="aprovar" data-id="${o.id}">Aprovar e agendar</button>` : ''}
+          ${o.status === 'pendente' ? `<button class="btn sec peq" data-acao="aprovar" data-id="${o.id}">${agendar ? 'Aprovar e agendar' : 'Aprovar'}</button>` : ''}
           <button class="btn sec peq" data-acao="editar" data-id="${o.id}">Editar</button>
           <button class="btn sec peq" data-acao="excluir" data-id="${o.id}">Excluir</button>
         </div></td></tr>`).join('')}
@@ -477,6 +567,7 @@ function orcamentos(el) {
     if (b.dataset.acao === 'editar') formOrcamento(o.id);
     if (b.dataset.acao === 'aprovar') {
       DB.salvarItem('orcamentos', { id: o.id, status: 'aprovado' });
+      if (!agendar) { render(); return; }
       formAgendamento(null, {
         clienteId: o.clienteId, data: hojeISO(), valor: totalOrcamento(o),
         servico: (o.itens || []).map((i) => i.descricao).join(', '),
@@ -500,7 +591,7 @@ function formOrcamento(id) {
       <div class="full total-linha" id="total"></div>
       ${campo('Forma de pagamento', 'pagamento', o.pagamento, 'text', 'full')}
       ${campo('Garantia / condições', 'condicoes', o.condicoes, 'textarea', 'full')}
-      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn">Salvar</button></div>
+      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
     </form>`, (raiz) => {
     const form = $('form', raiz);
     const atualizar = () => {
@@ -514,13 +605,13 @@ function formOrcamento(id) {
       e.preventDefault();
       const dados = lerForm(form);
       const itens = lerLinhas(raiz, COLS_ORC);
-      if (!itens.length) { alert('Adicione pelo menos um item ao orçamento.'); return; }
-      DB.salvarItem('orcamentos', {
-        ...dados, itens, desconto: num(dados.desconto), id: id || undefined,
-        numero: id ? o.numero : DB.proximoNumero('seqOrcamento'),
+      if (!itens.length) { avisar('Adicione pelo menos um item ao orçamento.', 'erro'); return; }
+      enviando($('#salvar', raiz), async () => {
+        const numero = id ? o.numero : await DB.proximoNumero('orcamento');
+        DB.salvarItem('orcamentos', { ...dados, itens, desconto: num(dados.desconto), id: id || undefined, numero });
+        fecharModal();
+        render();
       });
-      fecharModal();
-      render();
     });
   });
 }
@@ -604,7 +695,7 @@ function formLaudo(id, padrao = {}) {
       ${campo('Responsável técnico', 'responsavel', l.responsavel)}
       ${campo('Registro (CRQ/CRBio/CREA)', 'registroResp', l.registroResp)}
       ${campo('Observações', 'obs', l.obs, 'textarea', 'full')}
-      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn">Salvar</button></div>
+      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
     </form>`, (raiz) => {
     const form = $('form', raiz);
     ligarLinhas(raiz, COLS_PROD);
@@ -612,13 +703,13 @@ function formLaudo(id, padrao = {}) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const dados = lerForm(form);
-      DB.salvarItem('laudos', {
-        ...dados, produtos: lerLinhas(raiz, COLS_PROD), id: id || undefined,
-        numero: id ? l.numero : DB.proximoNumero('seqLaudo'),
+      const produtos = lerLinhas(raiz, COLS_PROD);
+      enviando($('#salvar', raiz), async () => {
+        const numero = id ? l.numero : await DB.proximoNumero('laudo');
+        DB.salvarItem('laudos', { ...dados, produtos, id: id || undefined, numero });
+        fecharModal();
+        if (rotaAtual() === 'laudos') render(); else location.hash = '#/laudos';
       });
-      fecharModal();
-      location.hash = '#/laudos';
-      render();
     });
   });
 }
@@ -674,7 +765,7 @@ function financeiro(el) {
         <button class="btn perigo" id="nova-desp">+ Despesa</button>
       </div></div>
     <div class="grade-kpi">
-      <div class="kpi"><div class="rotulo">Receitas do mês</div><div class="valor" style="color:var(--verde)">${moeda(receitas)}</div></div>
+      <div class="kpi"><div class="rotulo">Receitas do mês</div><div class="valor" style="color:var(--primaria)">${moeda(receitas)}</div></div>
       <div class="kpi"><div class="rotulo">Despesas do mês</div><div class="valor" style="color:var(--vermelho)">${moeda(despesas)}</div></div>
       <div class="kpi"><div class="rotulo">Resultado previsto</div><div class="valor">${moeda(receitas - despesas)}</div></div>
       <div class="kpi"><div class="rotulo">Recebido / a receber</div><div class="valor" style="font-size:18px">${moeda(recebido)} / ${moeda(aReceber)}</div></div>
@@ -684,7 +775,7 @@ function financeiro(el) {
         const sit = f.pago ? `<span class="tag verde">${f.tipo === 'receita' ? 'Recebido' : 'Pago'}${f.dataPagamento ? ' ' + dataBR(f.dataPagamento) : ''}</span>`
           : f.vencimento < hoje ? '<span class="tag vermelho">Vencido</span>' : '<span class="tag amarelo">Em aberto</span>';
         return `<tr><td>${dataBR(f.vencimento)}</td><td>${esc(f.descricao)}</td><td>${f.clienteId ? esc(nomeCliente(f.clienteId)) : ''}</td><td>${esc(f.categoria)}</td>
-        <td class="num" style="color:${f.tipo === 'receita' ? 'var(--verde)' : 'var(--vermelho)'}">${f.tipo === 'despesa' ? '- ' : ''}${moeda(f.valor)}</td><td>${sit}</td>
+        <td class="num" style="color:${f.tipo === 'receita' ? 'var(--primaria)' : 'var(--vermelho)'}">${f.tipo === 'despesa' ? '- ' : ''}${moeda(f.valor)}</td><td>${sit}</td>
         <td><div class="acoes">
           ${!f.pago ? `<button class="btn peq" data-acao="pagar" data-id="${f.id}">${f.tipo === 'receita' ? 'Recebido' : 'Pago'}</button>` : ''}
           <button class="btn sec peq" data-acao="editar" data-id="${f.id}">Editar</button>
@@ -735,14 +826,130 @@ function formFinanceiro(id, padrao = {}) {
         dataPagamento: dados.pago ? (f.dataPagamento || hojeISO()) : '',
       });
       fecharModal();
-      location.hash = '#/financeiro';
-      render();
+      if (rotaAtual() === 'financeiro') render(); else location.hash = '#/financeiro';
     });
   });
 }
 
 /* =====================================================================
-   CONFIGURAÇÕES
+   FUNCIONÁRIOS (somente administrador)
+   ===================================================================== */
+function tagsAcesso(p) {
+  if (p.admin) return '<span class="tag laranja">Acesso total</span>';
+  const nomes = DB.MODULOS.filter(([m]) => (p.permissoes || []).includes(m)).map(([, r]) => `<span class="tag cinza">${r}</span>`);
+  return nomes.length ? nomes.join(' ') : '<span class="tag vermelho">Nenhum</span>';
+}
+
+async function funcionarios(el) {
+  el.innerHTML = `
+    <div class="cabecalho"><h2>Funcionários</h2><button class="btn" id="novo">+ Novo funcionário</button></div>
+    <p class="ajuda">Defina aqui quem pode entrar no sistema e quais áreas cada funcionário pode acessar.
+      Quem não tem acesso a uma área não a vê no menu e também é bloqueado pelo banco de dados.</p>
+    <div class="cartao" style="padding:0" id="lista"><div class="vazio">Carregando...</div></div>`;
+  $('#novo', el).addEventListener('click', () => formFuncionario(null, () => funcionarios(el)));
+  let lista;
+  try {
+    lista = await DB.listarFuncionarios();
+  } catch (e) {
+    $('#lista', el).innerHTML = `<div class="vazio">${esc(e.message)}</div>`;
+    return;
+  }
+  if (rotaAtual() !== 'funcionarios' || !$('#lista', el)) return;
+  const eu = DB.perfil().id;
+  $('#lista', el).innerHTML = `<div class="tabela-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Acesso</th><th>Situação</th><th>Ações</th></tr></thead><tbody>
+    ${lista.map((p) => `<tr><td><b>${esc(p.nome || '—')}</b>${p.id === eu ? ' <span class="tag azul">você</span>' : ''}</td><td>${esc(p.email)}</td>
+      <td>${tagsAcesso(p)}</td>
+      <td>${p.ativo ? '<span class="tag verde">Ativo</span>' : '<span class="tag amarelo">Bloqueado</span>'}</td>
+      <td><button class="btn sec peq" data-id="${p.id}">Editar acesso</button></td></tr>`).join('')}
+  </tbody></table></div>`;
+  $('#lista', el).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-id]');
+    if (b) formFuncionario(lista.find((p) => p.id === b.dataset.id), () => funcionarios(el));
+  });
+}
+
+function formFuncionario(p, aoSalvar) {
+  const novo = !p;
+  const f = p || { admin: false, ativo: true, permissoes: ['clientes', 'agenda'] };
+  const euMesmo = !novo && p.id === DB.perfil().id;
+  abrirModal(novo ? 'Novo funcionário' : `Acesso de ${p.nome || p.email}`, `
+    <form class="form">
+      ${campo('Nome *', 'nome', f.nome, 'text', 'required')}
+      ${novo ? campo('E-mail (login) *', 'email', '', 'email', 'required autocomplete="off"')
+             : `<label>E-mail (login)<input value="${esc(f.email)}" disabled></label>`}
+      ${novo ? campo('Senha inicial * (mín. 6 caracteres)', 'senha', '', 'text', 'required minlength="6" autocomplete="off"') : ''}
+      <div class="full permissoes">
+        <b>O que este funcionário pode acessar?</b>
+        <label class="check destaque"><input type="checkbox" name="admin" ${f.admin ? 'checked' : ''} ${euMesmo ? 'disabled' : ''}>
+          Acesso total (administrador): vê tudo, inclusive financeiro, funcionários e configurações</label>
+        <div class="grade-perm">
+          ${DB.MODULOS.map(([m, r]) => `<label class="check"><input type="checkbox" name="perm_${m}" ${(f.permissoes || []).includes(m) ? 'checked' : ''}> ${r}</label>`).join('')}
+        </div>
+      </div>
+      ${novo ? '' : `<label class="check full"><input type="checkbox" name="ativo" ${f.ativo ? 'checked' : ''} ${euMesmo ? 'disabled' : ''}>
+        Pode entrar no sistema (desmarque para bloquear o acesso deste funcionário)</label>`}
+      ${euMesmo ? '<p class="ajuda full">Você não pode remover o seu próprio acesso de administrador.</p>' : ''}
+      <div class="form-acoes">
+        ${novo ? '' : '<button type="button" class="btn sec" id="reset-senha" style="margin-right:auto">Enviar e-mail para trocar senha</button>'}
+        <button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button>
+      </div>
+    </form>`, (raiz) => {
+    const form = $('form', raiz);
+    const cbAdmin = form.admin;
+    const sincronizar = () => $$('.grade-perm input', raiz).forEach((cb) => (cb.disabled = cbAdmin.checked));
+    cbAdmin.addEventListener('change', sincronizar);
+    sincronizar();
+    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
+    if (!novo) {
+      $('#reset-senha', raiz).addEventListener('click', (e) => enviando(e.target, async () => {
+        await DB.enviarRedefinicaoSenha(p.email);
+        avisar(`E-mail de troca de senha enviado para ${p.email}.`);
+      }));
+    }
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const d = lerForm(form);
+      const campos = {
+        nome: d.nome,
+        admin: euMesmo ? true : d.admin,
+        permissoes: DB.MODULOS.map(([m]) => m).filter((m) => d['perm_' + m]),
+      };
+      if (!novo) campos.ativo = euMesmo ? true : d.ativo;
+      enviando($('#salvar', raiz), async () => {
+        if (novo) await DB.criarFuncionario({ ...campos, email: d.email, senha: d.senha });
+        else await DB.atualizarFuncionario(p.id, campos);
+        fecharModal();
+        avisar(novo ? 'Funcionário cadastrado. Ele já pode entrar com o e-mail e a senha informados.' : 'Acesso atualizado.');
+        aoSalvar();
+      });
+    });
+  });
+}
+
+function formMinhaSenha() {
+  abrirModal('Alterar minha senha', `
+    <form class="form">
+      ${campo('Nova senha *', 'senha', '', 'password', 'required minlength="6" autocomplete="new-password"')}
+      ${campo('Repita a nova senha *', 'senha2', '', 'password', 'required minlength="6" autocomplete="new-password"')}
+      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
+    </form>`, (raiz) => {
+    const form = $('form', raiz);
+    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const d = lerForm(form);
+      if (d.senha !== d.senha2) { avisar('As senhas não conferem.', 'erro'); return; }
+      enviando($('#salvar', raiz), async () => {
+        await DB.alterarMinhaSenha(d.senha);
+        fecharModal();
+        avisar('Senha alterada com sucesso.');
+      });
+    });
+  });
+}
+
+/* =====================================================================
+   CONFIGURAÇÕES (somente administrador)
    ===================================================================== */
 function configuracoes(el) {
   const c = DB.config();
@@ -758,18 +965,22 @@ function configuracoes(el) {
         ${campo('Endereço', 'endereco', c.endereco, 'text', 'full')}
         ${campo('Responsável técnico', 'responsavelTecnico', c.responsavelTecnico)}
         ${campo('Registro do responsável (CRQ/CRBio)', 'registroResp', c.registroResp)}
-        <div class="form-acoes"><button class="btn">Salvar dados</button></div>
+        <div class="form-acoes"><button class="btn" id="salvar-cfg">Salvar dados</button></div>
       </form></div>
     <div class="cartao"><h3>Backup dos dados</h3>
-      <p style="color:var(--suave)">Os dados ficam salvos neste navegador. Faça backup regularmente e guarde o arquivo em local seguro (Google Drive, pendrive, e-mail).</p>
+      <p class="ajuda">Os dados ficam guardados no banco de dados na nuvem. Mesmo assim, é bom baixar uma cópia de vez em quando.
+        A restauração também serve para importar os dados da versão anterior do sistema (que guardava no navegador).</p>
       <div class="acoes">
-        <button class="btn" id="exportar">⬇ Baixar backup</button>
-        <label class="btn sec">⬆ Restaurar backup<input type="file" id="importar" accept="application/json,.json" hidden></label>
+        <button class="btn" id="exportar">Baixar backup</button>
+        <label class="btn sec">Restaurar / importar backup<input type="file" id="importar" accept="application/json,.json" hidden></label>
       </div></div>`;
   $('#form-cfg', el).addEventListener('submit', (e) => {
     e.preventDefault();
-    DB.salvarConfig(lerForm(e.target));
-    alert('Dados salvos!');
+    const dados = lerForm(e.target);
+    enviando($('#salvar-cfg', el), async () => {
+      await DB.salvarConfig(dados);
+      avisar('Dados da empresa salvos.');
+    });
   });
   $('#exportar', el).addEventListener('click', () => {
     const blob = new Blob([DB.exportar()], { type: 'application/json' });
@@ -781,21 +992,95 @@ function configuracoes(el) {
   });
   $('#importar', el).addEventListener('change', async (e) => {
     const arq = e.target.files[0];
+    e.target.value = '';
     if (!arq) return;
-    if (!confirmar('Restaurar o backup vai SUBSTITUIR todos os dados atuais. Continuar?')) return;
+    if (!confirmar('Os registros do backup serão gravados no banco (registros com o mesmo código serão substituídos). Continuar?')) return;
     try {
-      DB.importar(await arq.text());
-      alert('Backup restaurado com sucesso!');
+      avisar('Importando...');
+      await DB.importar(await arq.text());
+      avisar('Backup importado com sucesso!');
       render();
     } catch (err) {
-      alert('Não foi possível restaurar: ' + err.message);
+      avisar('Não foi possível importar: ' + err.message, 'erro');
     }
   });
 }
 
-/* ---------- Inicialização ---------- */
+/* =====================================================================
+   INICIALIZAÇÃO E LOGIN
+   ===================================================================== */
+function mostrarTela(id) {
+  ['carregando', 'tela-login', 'tela-aviso', 'app'].forEach((t) => ($('#' + t).hidden = t !== id));
+}
+function mostrarAviso(html) {
+  $('#aviso-texto').innerHTML = html;
+  mostrarTela('tela-aviso');
+}
+
+async function entrarNoApp(perfil) {
+  if (!perfil) { mostrarTela('tela-login'); return; }
+  if (!perfil.ativo) {
+    mostrarAviso(`<p>Olá${perfil.nome ? ', ' + esc(perfil.nome) : ''}! Seu acesso ainda não foi liberado.</p>
+      <p class="ajuda">Peça ao administrador para liberar o seu login na tela "Funcionários".</p>
+      <button class="btn" id="aviso-sair">Voltar</button>`);
+    $('#aviso-sair').addEventListener('click', async () => { await DB.sair(); mostrarTela('tela-login'); });
+    return;
+  }
+  mostrarTela('carregando');
+  await DB.carregar();
+  montarMenu();
+  mostrarTela('app');
+  render();
+}
+
+$('#form-login').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const d = lerForm(e.target);
+  const erro = $('#login-erro');
+  const botao = $('button', e.target);
+  erro.hidden = true;
+  botao.disabled = true;
+  botao.textContent = 'Entrando...';
+  try {
+    const perfil = await DB.entrar(d.email, d.senha);
+    e.target.reset();
+    await entrarNoApp(perfil);
+  } catch (err) {
+    erro.textContent = DB.traduzirErro(err);
+    erro.hidden = false;
+    mostrarTela('tela-login');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = 'Entrar';
+  }
+});
+
+$('#btn-sair').addEventListener('click', async () => {
+  await DB.sair();
+  history.replaceState(null, '', location.pathname);
+  mostrarTela('tela-login');
+});
+$('#btn-senha').addEventListener('click', formMinhaSenha);
+
+DB.definirAoErro((msg) => avisar(msg, 'erro'));
 ligarAcoesAgendamento($('#view'));
-render();
+
+(async () => {
+  if (!DB.configurado()) {
+    mostrarAviso(`<h3>Banco de dados não configurado</h3>
+      <p class="ajuda">Preencha o endereço e a chave do Supabase no arquivo <code>js/config.js</code>.
+      O passo a passo completo está no arquivo README do projeto.</p>`);
+    return;
+  }
+  try {
+    await entrarNoApp(await DB.iniciar());
+  } catch (e) {
+    mostrarAviso(`<p>Não foi possível conectar ao banco de dados.</p><p class="ajuda">${esc(DB.traduzirErro(e))}</p>
+      <button class="btn" id="tentar">Tentar novamente</button>`);
+    $('#tentar').addEventListener('click', () => location.reload());
+  }
+})();
+
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

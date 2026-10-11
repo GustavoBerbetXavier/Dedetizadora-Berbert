@@ -1,65 +1,101 @@
-# Dedetizadora Berbert — Sistema de Gestão
+# Berbert Pest Control — Sistema de Gestão
 
-Sistema web para a dedetizadora. Funciona no computador e no celular e pode ser
-instalado na tela inicial como um aplicativo.
+Sistema web da dedetizadora. Funciona no computador e no celular, pode ser
+instalado na tela inicial como um aplicativo e guarda os dados em um banco de
+dados na nuvem (Supabase), com login para cada funcionário.
 
 ## Funcionalidades
 
-- **Painel**: serviços do dia, próximos 7 dias, valores a receber, saldo do mês e contas vencidas.
-- **Clientes**: cadastro (pessoa física/empresa), busca, botão de WhatsApp e histórico completo do cliente.
-- **Agenda**: calendário mensal com agendamentos por dia, técnico, valor e status.
-  A partir de um agendamento dá para **gerar o laudo** e **lançar a receita** com um clique.
-- **Orçamentos**: itens, quantidades, desconto, validade e forma de pagamento.
-  Imprime ou salva em PDF. Ao aprovar, já abre o agendamento do serviço.
-- **Laudos / Certificados de execução**: pragas alvo, áreas tratadas, método, produtos
-  (princípio ativo, grupo químico, registro MS), antídoto, recomendações, garantia e
-  responsável técnico. Imprime ou salva em PDF.
-- **Financeiro**: receitas e despesas por mês, categorias, contas pagas/em aberto/vencidas.
-- **Configurações**: dados da empresa que aparecem nos documentos e backup/restauração dos dados.
+- **Login de funcionários** com permissões por área: o administrador escolhe quem
+  vê Clientes, Agenda, Orçamentos, Laudos e Financeiro. Quem tem **acesso total**
+  vê tudo, inclusive Funcionários e Configurações.
+- **Painel**: serviços do dia, próximos 7 dias e, para quem tem acesso ao
+  financeiro, valores a receber, saldo do mês e contas vencidas.
+- **Clientes**: cadastro, busca, botão de WhatsApp e histórico do cliente.
+- **Agenda**: calendário mensal com os agendamentos. De um agendamento dá para
+  **gerar o laudo** e **lançar a receita** com um clique.
+- **Orçamentos**: itens, desconto, validade e forma de pagamento. Imprime ou salva
+  em PDF com a logo da empresa. Ao aprovar, já abre o agendamento.
+- **Laudos / Certificados de execução**: pragas, áreas, método, produtos
+  (princípio ativo, grupo químico, registro MS), antídoto, recomendações, garantia
+  e responsável técnico. Imprime ou salva em PDF com a logo.
+- **Financeiro**: receitas e despesas por mês, contas pagas, em aberto e vencidas.
+- **Configurações**: dados da empresa usados nos documentos e backup dos dados.
 
-## Como usar
+## Como as permissões funcionam
 
-Não precisa instalar nada. Basta abrir o `index.html` no navegador
-(Chrome recomendado), ou publicar a pasta em qualquer hospedagem de sites estáticos.
+| Área | Quem acessa |
+|---|---|
+| Painel | Todos os funcionários liberados |
+| Clientes | Quem tem "Clientes" (os demais só veem o nome do cliente na agenda e nos laudos) |
+| Agenda, Orçamentos, Laudos, Financeiro | Só quem tem a permissão daquela área |
+| Funcionários e Configurações | Só administradores (acesso total) |
 
-Para testar localmente com um servidor:
+As regras são aplicadas **dentro do banco de dados** (Row Level Security), e não só
+escondidas na tela: mesmo que alguém tente acessar os dados por fora do sistema, o
+banco bloqueia.
 
-```bash
-python3 -m http.server 8000
-# abra http://localhost:8000
-```
+Um login criado por fora do sistema começa **bloqueado e sem permissões**, até um
+administrador liberar na tela "Funcionários".
 
-### Publicar grátis no GitHub Pages
+## Instalação (uma única vez, cerca de 15 minutos)
 
-1. No GitHub, vá em **Settings → Pages**.
-2. Em *Source*, escolha a branch e a pasta `/ (root)`.
-3. O sistema ficará disponível em `https://<usuario>.github.io/<repositorio>/`.
+### 1. Criar o banco de dados no Supabase (grátis)
+
+1. Crie uma conta em <https://supabase.com> e clique em **New project**.
+   Escolha um nome (ex.: `berbert`), crie uma senha forte para o banco e selecione a
+   região **South America (São Paulo)**.
+2. No menu lateral, abra **SQL Editor**, clique em **New query**, cole todo o conteúdo
+   do arquivo [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**.
+3. Vá em **Authentication → Sign In / Providers → Email** e **desative "Confirm email"**
+   (assim os funcionários cadastrados pelo sistema já entram direto).
+   Deixe "Allow new users to sign up" **ativado**: é ele que permite ao administrador
+   cadastrar funcionários pelo sistema.
+4. Vá em **Authentication → Users → Add user → Create new user**, informe o **seu**
+   e-mail e senha e marque **Auto Confirm User**.
+   **O primeiro usuário criado vira o administrador** do sistema.
+
+### 2. Ligar o sistema ao banco
+
+1. No Supabase, abra **Project Settings → API** (ou o botão **Connect**) e copie:
+   - **Project URL** (ex.: `https://abcdefgh.supabase.co`)
+   - a chave **anon public** (ou **publishable key**)
+2. Cole os dois valores no arquivo [`js/config.js`](js/config.js).
+
+Essa chave pode ficar no código: ela só permite tentar fazer login. O que cada pessoa
+vê depende do login e das permissões do banco. **Nunca** coloque a chave
+`service_role` / `secret` nesse arquivo.
+
+### 3. Publicar (GitHub Pages, grátis)
+
+1. No GitHub, vá em **Settings → Pages**, escolha a branch e a pasta `/ (root)`.
+2. O sistema ficará em `https://<usuario>.github.io/<repositorio>/`.
+3. No Supabase, em **Authentication → URL Configuration**, coloque esse endereço em
+   **Site URL** (usado nos e-mails de troca de senha).
 4. No celular, abra o endereço no Chrome e toque em **"Adicionar à tela inicial"**.
 
-### Gerar PDF
+## Uso no dia a dia
 
-Clique em **Imprimir / PDF** no orçamento ou laudo e escolha
-**"Salvar como PDF"** como impressora.
-
-## Importante sobre os dados
-
-Nesta primeira versão os dados ficam salvos **no próprio navegador** de cada aparelho.
-Isso significa que:
-
-- os dados **não são compartilhados** automaticamente entre computador e celular;
-- limpar os dados do navegador apaga as informações.
-
-Use **Configurações → Baixar backup** regularmente. O próximo passo recomendado é
-ligar o sistema a um banco de dados na nuvem (ex.: Supabase ou Firebase) para que
-toda a equipe acesse os mesmos dados, com login por usuário.
+- **Cadastrar funcionário**: menu **Funcionários → Novo funcionário**. Informe nome,
+  e-mail, uma senha inicial e marque as áreas que ele pode acessar.
+- **Mudar o acesso ou bloquear** alguém: **Funcionários → Editar acesso**.
+- **Esqueceu a senha**: em "Editar acesso" há o botão **Enviar e-mail para trocar senha**.
+  Cada um também pode trocar a própria senha no botão **Alterar senha** no topo.
+- **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
+- **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
+  "Baixar backup". Depois, na versão nova, vá em
+  **Configurações → Restaurar / importar backup**.
 
 ## Estrutura
 
 ```
-index.html      página principal
-css/style.css   visual
-js/db.js        armazenamento dos dados
-js/app.js       telas e regras do sistema
-sw.js           funcionamento offline
-manifest.json   instalação como aplicativo
+index.html            página principal (login e sistema)
+css/style.css         visual
+js/config.js          endereço e chave do Supabase
+js/db.js              login, permissões e acesso ao banco
+js/app.js             telas e regras do sistema
+js/vendor/supabase.js biblioteca oficial do Supabase (v2.116.0)
+supabase/schema.sql   tabelas e regras de permissão do banco
+img/                  logo e ícones
+sw.js, manifest.json  instalação como aplicativo
 ```
