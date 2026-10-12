@@ -260,6 +260,8 @@ function blocoCliente(cli) {
 const ROTAS = [
   { rota: 'painel', titulo: 'Painel', modulo: null, fn: painel },
   { rota: 'clientes', titulo: 'Clientes', modulo: 'clientes', fn: clientes },
+  // Página de um cliente: 'cliente/<id>' (ou 'cliente/novo'); no menu, acende "Clientes".
+  { rota: 'cliente', titulo: 'Cliente', modulo: 'clientes', fn: paginaCliente, foraDoMenu: true, menu: 'clientes' },
   { rota: 'agenda', titulo: 'Agenda', modulo: 'agenda', fn: agenda },
   { rota: 'orcamentos', titulo: 'Orçamentos', modulo: 'orcamentos', fn: orcamentos },
   { rota: 'laudos', titulo: 'Laudos', modulo: 'laudos', fn: laudos },
@@ -382,16 +384,18 @@ function irPara(rota, substituir = false) {
   atualizarDados();
 }
 function render() {
-  let r = ROTAS.find((x) => x.rota === rotaAtual()) || ROTAS[0];
+  const [base, ...resto] = rotaAtual().split('/');
+  let r = ROTAS.find((x) => x.rota === base) || ROTAS[0];
   if (!rotaPermitida(r)) r = ROTAS[0];
-  $$('.menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.rota === r.rota));
+  $$('.menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.rota === (r.menu || r.rota)));
   $('#menu').classList.remove('aberto');
-  r.fn($('#view'));
+  window.scrollTo(0, 0);
+  r.fn($('#view'), resto.join('/'));
 }
 // Busca alterações feitas por outros funcionários (ao trocar de tela ou voltar ao app).
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-11.3';
+const VERSAO_APP = '2026-10-12.1';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -409,7 +413,8 @@ async function atualizarDados() {
   const rota = rotaAtual();
   try {
     await DB.carregar();
-    if (rota === rotaAtual() && $('#modal').hidden) render();
+    // Na página de um cliente não redesenha, para não perder o que estiver sendo digitado.
+    if (rota === rotaAtual() && $('#modal').hidden && !rota.startsWith('cliente/')) render();
   } catch (e) {
     avisar('Não foi possível atualizar os dados: ' + DB.traduzirErro(e), 'erro');
   }
@@ -487,7 +492,7 @@ function painel(el) {
       </tbody></table></div>` : '<div class="vazio">Nenhuma conta vencida.</div>'}
     </div>` : ''}`;
   if (verAgenda) $('#novo-ag', el).addEventListener('click', () => formAgendamento(null, { data: hoje }));
-  if (DB.pode('clientes')) $('#novo-cli', el).addEventListener('click', () => formCliente(null));
+  if (DB.pode('clientes')) $('#novo-cli', el).addEventListener('click', () => abrirCliente('novo'));
 }
 
 function tabelaAgendamentos(lista, comAcoes = true) {
@@ -505,6 +510,14 @@ function tabelaAgendamentos(lista, comAcoes = true) {
       </div></td>` : ''}
     </tr>`).join('')}
   </tbody></table></div>`;
+}
+
+/* ---------- Filtros guardados na sessão (sobrevivem ao F5) ---------- */
+function carregarEstado(nome, padrao) {
+  try { return { ...padrao, ...JSON.parse(sessionStorage.getItem('berbert-estado-' + nome) || '{}') }; } catch { return padrao; }
+}
+function guardarEstado(nome, estado) {
+  try { sessionStorage.setItem('berbert-estado-' + nome, JSON.stringify(estado)); } catch { /* sem armazenamento */ }
 }
 
 /* ---------- Paginação (usada em Clientes e Orçamentos) ---------- */
@@ -542,7 +555,7 @@ function ligarPaginacao(caixa, estado, desenhar) {
    CLIENTES
    ===================================================================== */
 // Página e filtros da lista ficam guardados ao editar um cliente ou voltar à tela.
-const estadoClientes = { pagina: 1, busca: '', campo: 'todos', situacao: 'todos' };
+const estadoClientes = carregarEstado('clientes', { pagina: 1, busca: '', campo: 'todos', situacao: 'todos' });
 const FILTROS_CLIENTE = [
   ['todos', 'Todos os campos', 'Buscar por código, nome, telefone, cidade...'],
   ['nome', 'Razão Social', 'Digite a razão social ou nome...'],
@@ -615,9 +628,10 @@ function clientes(el) {
     const todos = filtrarClientes(DB.listar('clientes'), estadoClientes)
       .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
     const { itens: lista, html: rodape } = paginar(todos, estadoClientes);
+    guardarEstado('clientes', estadoClientes);
     $('#lista', el).innerHTML = lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Cód.</th><th>Razão social / Nome</th><th>Telefone</th><th>Bairro / Cidade</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
       ${lista.map((c) => `<tr class="${clienteAtivo(c) ? '' : 'inativo'}"><td class="cod-col">${esc(c.codigo || '—')}</td>
-        <td><b>${esc(c.nome)}</b>${clienteAtivo(c) ? '' : ' <span class="tag cinza">Inativo</span>'}${c.fantasia ? `<div class="sub">${esc(c.fantasia)}</div>` : ''}</td>
+        <td><a href="#" class="link-cliente" data-acao="abrir" data-id="${c.id}">${esc(c.nome)}</a>${clienteAtivo(c) ? '' : ' <span class="tag cinza">Inativo</span>'}${anotacoesAtivas(c).length ? ` <span class="tag azul" title="Anotações">${anotacoesAtivas(c).length} anot.</span>` : ''}${c.fantasia ? `<div class="sub">${esc(c.fantasia)}</div>` : ''}</td>
         <td>${esc(c.telefone)}</td><td>${esc([c.bairro, c.cidade].filter(Boolean).join(' / '))}</td>
         <td>${c.tipo === 'PJ' ? 'Empresa' : 'Pessoa física'}</td>
         <td><div class="acoes">
@@ -647,14 +661,16 @@ function clientes(el) {
     desenhar();
   });
   ligarPaginacao($('#lista', el), estadoClientes, desenhar);
-  $('#novo', el).addEventListener('click', () => formCliente(null));
+  $('#novo', el).addEventListener('click', () => abrirCliente('novo'));
   $('#importar', el).addEventListener('click', importarClientes);
   $('#lista', el).addEventListener('click', (e) => {
     const b = e.target.closest('[data-acao]');
     if (!b) return;
+    e.preventDefault();
     const id = b.dataset.id;
-    if (b.dataset.acao === 'editar') formCliente(id);
-    if (b.dataset.acao === 'hist') historicoCliente(id);
+    if (b.dataset.acao === 'abrir' || b.dataset.acao === 'editar') abrirCliente(id);
+    if (b.dataset.acao === 'hist') abrirCliente(id, 'historico');
+    if (b.dataset.acao === 'notas') abrirCliente(id, 'anotacoes');
     if (b.dataset.acao === 'excluir' && confirmar('Excluir este cliente? O histórico ligado a ele continuará salvo.')) {
       DB.remover('clientes', id);
       render();
@@ -1004,10 +1020,8 @@ function etapaMapeamento(el, nomeArquivo, linhas) {
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function formCliente(id, aoSalvar) {
-  const c = id ? DB.obter('clientes', id) : { tipo: 'PF', codigo: geradorCodigos()() };
-  abrirModal(id ? 'Editar cliente' : 'Novo cliente', `
-    <form class="form">
+function camposCliente(c) {
+  return `
       ${campo('Código', 'codigo', c.codigo)}
       <label class="check"><input type="checkbox" name="ativo" ${clienteAtivo(c) ? 'checked' : ''}> Cliente ativo</label>
       ${campo('Razão social / Nome *', 'nome', c.nome, 'text', 'required full')}
@@ -1022,33 +1036,208 @@ function formCliente(id, aoSalvar) {
       ${campo('CEP', 'cep', c.cep)}
       ${campo('Contato responsável', 'contato', c.contato)}
       ${campo('Tipo de imóvel', 'imovel', c.imovel, 'text', 'placeholder="Casa, apartamento, restaurante..."')}
-      ${campo('Observações', 'obs', c.obs, 'textarea', 'full')}
+      ${campo('Observações', 'obs', c.obs, 'textarea', 'full')}`;
+}
+// Valida e grava o cliente do formulário. Devolve o cliente salvo, ou null se algo impedir.
+function salvarClienteDoForm(form, id) {
+  const dados = lerForm(form);
+  const cod = normalizar(dados.codigo);
+  const outro = cod && DB.listar('clientes').find((x) => x.id !== id && normalizar(x.codigo) === cod);
+  if (outro) { avisar(`O código ${dados.codigo} já é do cliente ${outro.nome}.`, 'erro'); form.codigo.focus(); return null; }
+  return DB.salvarItem('clientes', { ...dados, id: id || undefined });
+}
+
+// Cadastro rápido em janela (usado dentro do agendamento, sem sair da tela).
+function formCliente(id, aoSalvar) {
+  const c = id ? DB.obter('clientes', id) : { tipo: 'PF', codigo: geradorCodigos()() };
+  abrirModal(id ? 'Editar cliente' : 'Novo cliente', `
+    <form class="form">${camposCliente(c)}
       <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn">Salvar</button></div>
     </form>`, (raiz) => {
     const form = $('form', raiz);
     $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const dados = lerForm(form);
-      const cod = normalizar(dados.codigo);
-      const outro = cod && DB.listar('clientes').find((x) => x.id !== id && normalizar(x.codigo) === cod);
-      if (outro) { avisar(`O código ${dados.codigo} já é do cliente ${outro.nome}.`, 'erro'); form.codigo.focus(); return; }
-      const salvo = DB.salvarItem('clientes', { ...dados, id: id || undefined });
+      const salvo = salvarClienteDoForm(form, id);
+      if (!salvo) return;
       fecharModal();
       if (aoSalvar) aoSalvar(salvo); else render();
     });
   });
 }
 
-function historicoCliente(id) {
-  const c = DB.obter('clientes', id);
+/* ---------- Página do cliente (abas: Dados, Anotações, Histórico) ---------- */
+let abaCliente = 'dados';
+function abrirCliente(id, aba = 'dados') {
+  abaCliente = aba;
+  irPara('cliente/' + id);
+}
+const anotacoesAtivas = (c) => (c.anotacoes || []).filter((a) => a.ativa !== false);
+
+function paginaCliente(el, id) {
+  const novo = id === 'novo';
+  const c = novo ? { tipo: 'PF', codigo: geradorCodigos()() } : DB.obter('clientes', id);
+  if (!c) {
+    el.innerHTML = `<div class="cartao"><p>Cliente não encontrado. Ele pode ter sido excluído.</p>
+      <button class="btn sec" id="voltar">Voltar para clientes</button></div>`;
+    $('#voltar', el).addEventListener('click', () => irPara('clientes'));
+    return;
+  }
+  if (novo) abaCliente = 'dados';
+  const abas = [['dados', 'Dados do cliente'], ['anotacoes', 'Anotações'], ['historico', 'Histórico']];
+  el.innerHTML = `
+    <div class="pagina-topo">
+      <button class="btn sec peq" id="voltar">&lsaquo; Clientes</button>
+      <h2>${novo ? 'Novo cliente' : `${c.codigo ? esc(c.codigo) + ' — ' : ''}${esc(c.nome)}`}</h2>
+      ${!novo && !clienteAtivo(c) ? '<span class="tag cinza">Inativo</span>' : ''}
+    </div>
+    <div class="abas" role="tablist">
+      ${abas.map(([v, r]) => `<button class="aba ${abaCliente === v ? 'ativa' : ''}" data-aba="${v}" role="tab" ${novo && v !== 'dados' ? 'disabled title="Salve o cliente primeiro"' : ''}>${r}${v === 'anotacoes' && !novo ? ` <span class="cont">${anotacoesAtivas(c).length}</span>` : ''}</button>`).join('')}
+    </div>
+    <section class="cartao" data-painel="dados" ${abaCliente === 'dados' ? '' : 'hidden'}>
+      <form class="form" id="form-cliente">${camposCliente(c)}
+        <div class="form-acoes">
+          ${novo ? '' : '<button type="button" class="btn sec perigo-texto" id="excluir-cliente" style="margin-right:auto">Excluir cliente</button>'}
+          <button type="button" class="btn sec" id="voltar2">Voltar</button>
+          <button class="btn" id="salvar-cliente">${novo ? 'Cadastrar cliente' : 'Salvar alterações'}</button>
+        </div>
+      </form>
+    </section>
+    ${novo ? '' : `
+    <section class="cartao" data-painel="anotacoes" ${abaCliente === 'anotacoes' ? '' : 'hidden'}></section>
+    <section class="cartao" data-painel="historico" ${abaCliente === 'historico' ? '' : 'hidden'}>${historicoClienteHTML(c)}</section>`}`;
+
+  const voltar = () => irPara('clientes');
+  $('#voltar', el).addEventListener('click', voltar);
+  $('#voltar2', el).addEventListener('click', voltar);
+  $('.abas', el).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-aba]');
+    if (!b || b.disabled) return;
+    abaCliente = b.dataset.aba;
+    $$('.aba', el).forEach((x) => x.classList.toggle('ativa', x === b));
+    $$('[data-painel]', el).forEach((p) => (p.hidden = p.dataset.painel !== abaCliente));
+  });
+  $('#form-cliente', el).addEventListener('submit', (e) => {
+    e.preventDefault();
+    const salvo = salvarClienteDoForm(e.target, novo ? null : c.id);
+    if (!salvo) return;
+    avisar(novo ? 'Cliente cadastrado.' : 'Alterações salvas.');
+    if (novo) irPara('cliente/' + salvo.id, true);
+    else {
+      const h2 = $('.pagina-topo h2', el);
+      h2.textContent = `${salvo.codigo ? salvo.codigo + ' — ' : ''}${salvo.nome}`;
+    }
+  });
+  if (!novo) {
+    $('#excluir-cliente', el).addEventListener('click', () => {
+      if (!confirmar(`Excluir o cliente ${c.nome}? O histórico ligado a ele continuará salvo.`)) return;
+      DB.remover('clientes', c.id);
+      avisar('Cliente excluído.');
+      irPara('clientes', true);
+    });
+    painelAnotacoes($('[data-painel="anotacoes"]', el), c.id, () => {
+      const cont = $('[data-aba="anotacoes"] .cont', el);
+      if (cont) cont.textContent = anotacoesAtivas(DB.obter('clientes', c.id)).length;
+    });
+  }
+}
+
+// Aba Anotações: anotações internas do cliente, com data, autor, editar e inativar.
+function painelAnotacoes(caixa, clienteId, aoMudar) {
+  let editando = null; // id da anotação em edição
+  let mostrarInativas = false;
+  const gravar = (lista) => {
+    DB.salvarItem('clientes', { id: clienteId, anotacoes: lista });
+    aoMudar();
+  };
+  const desenhar = () => {
+    const c = DB.obter('clientes', clienteId);
+    const todas = (c.anotacoes || []).slice().sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || ''));
+    const visiveis = mostrarInativas ? todas : todas.filter((a) => a.ativa !== false);
+    const emEdicao = editando && todas.find((a) => a.id === editando);
+    caixa.innerHTML = `
+      <p class="ajuda">Data de cadastro (registro): <b>${c.criadoEm ? dataBR(c.criadoEm.slice(0, 10)) : '—'}</b></p>
+      <form class="form-anotacao" id="form-anotacao">
+        <label><span>Anotação <span class="obrigatorio">*</span></span>
+          <textarea name="texto" rows="4" placeholder="Digite a anotação..." required>${esc(emEdicao ? emEdicao.texto : '')}</textarea></label>
+        <div class="anotacao-botoes">
+          <button class="btn">${emEdicao ? 'Salvar anotação' : 'Incluir anotação'}</button>
+          <button type="button" class="btn sec" id="limpar-anotacao">${emEdicao ? 'Cancelar edição' : 'Nova / limpar'}</button>
+        </div>
+      </form>
+      <div class="tabela-wrap"><table class="tabela-anotacoes"><thead><tr><th style="width:160px">Cadastro</th><th>Anotação</th><th style="width:170px"></th></tr></thead><tbody>
+        ${visiveis.length ? visiveis.map((a) => `<tr class="${a.ativa === false ? 'inativo' : ''}">
+          <td>${dataHoraBR(a.criadoEm)}${a.autor ? `<div class="sub">${esc(a.autor)}</div>` : ''}${a.editadoEm ? `<div class="sub">editada ${dataHoraBR(a.editadoEm)}</div>` : ''}</td>
+          <td class="texto-anotacao">${esc(a.texto)}${a.ativa === false ? ' <span class="tag cinza">Inativa</span>' : ''}</td>
+          <td><div class="acoes">${a.ativa === false
+            ? `<button type="button" class="btn sec peq" data-nota="reativar" data-id="${a.id}">Reativar</button>`
+            : `<button type="button" class="btn sec peq" data-nota="editar" data-id="${a.id}">Editar</button>
+               <button type="button" class="btn sec peq" data-nota="inativar" data-id="${a.id}">Inativar</button>`}</div></td>
+        </tr>`).join('') : '<tr><td colspan="3" class="vazio" style="text-align:left">Nenhuma anotação cadastrada.</td></tr>'}
+      </tbody></table></div>
+      <div class="anotacao-rodape">
+        <span class="ajuda" style="margin:0">${todas.filter((a) => a.ativa !== false).length} anotação(ões) ativa(s) listada(s).</span>
+        ${todas.some((a) => a.ativa === false) ? `<label class="check-linha" style="margin:0"><input type="checkbox" id="ver-inativas" ${mostrarInativas ? 'checked' : ''}> Mostrar inativas</label>` : ''}
+      </div>`;
+    const form = $('#form-anotacao', caixa);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const texto = form.texto.value.trim();
+      if (!texto) { avisar('Digite a anotação.', 'erro'); return; }
+      const lista = (DB.obter('clientes', clienteId).anotacoes || []).slice();
+      const p = DB.perfil();
+      if (editando) {
+        const i = lista.findIndex((a) => a.id === editando);
+        if (i >= 0) lista[i] = { ...lista[i], texto, editadoEm: new Date().toISOString() };
+        avisar('Anotação alterada.');
+      } else {
+        lista.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), texto, ativa: true,
+          criadoEm: new Date().toISOString(), autor: p.nome || p.email });
+        avisar('Anotação incluída.');
+      }
+      editando = null;
+      gravar(lista);
+      desenhar();
+    });
+    $('#limpar-anotacao', caixa).addEventListener('click', () => { editando = null; desenhar(); $('textarea', caixa).focus(); });
+    const ver = $('#ver-inativas', caixa);
+    if (ver) ver.addEventListener('change', () => { mostrarInativas = ver.checked; desenhar(); });
+  };
+  caixa.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-nota]');
+    if (!b) return;
+    const lista = (DB.obter('clientes', clienteId).anotacoes || []).slice();
+    const i = lista.findIndex((a) => a.id === b.dataset.id);
+    if (i < 0) return;
+    if (b.dataset.nota === 'editar') {
+      editando = lista[i].id;
+      desenhar();
+      const t = $('textarea', caixa);
+      t.focus();
+      t.setSelectionRange(t.value.length, t.value.length);
+      return;
+    }
+    if (b.dataset.nota === 'inativar') {
+      if (!confirmar('Inativar esta anotação? Ela deixa de aparecer na lista, mas pode ser reativada.')) return;
+      lista[i] = { ...lista[i], ativa: false, inativadaEm: new Date().toISOString() };
+    }
+    if (b.dataset.nota === 'reativar') lista[i] = { ...lista[i], ativa: true };
+    if (editando === lista[i].id) editando = null;
+    gravar(lista);
+    desenhar();
+  });
+  desenhar();
+}
+
+function historicoClienteHTML(c) {
+  const id = c.id;
   const ags = DB.listar('agendamentos').filter((a) => a.clienteId === id).sort((a, b) => b.data.localeCompare(a.data));
   const orcs = DB.listar('orcamentos').filter((o) => o.clienteId === id).sort((a, b) => b.data.localeCompare(a.data));
   const lds = DB.listar('laudos').filter((l) => l.clienteId === id).sort((a, b) => b.data.localeCompare(a.data));
   const fin = DB.listar('financeiro').filter((f) => f.clienteId === id);
   const pago = fin.filter((f) => f.tipo === 'receita' && f.pago).reduce((s, f) => s + num(f.valor), 0);
   const aberto = fin.filter((f) => f.tipo === 'receita' && !f.pago).reduce((s, f) => s + num(f.valor), 0);
-  abrirModal(`Histórico — ${c.codigo ? c.codigo + ' · ' : ''}${c.nome}`, `
+  return `
     <p>${esc(c.telefone)} · ${esc([c.endereco, c.bairro, c.cidade].filter(Boolean).join(', '))}</p>
     <div class="grade-kpi">
       ${DB.pode('agenda') ? `<div class="kpi"><div class="rotulo">Serviços</div><div class="valor">${ags.length}</div></div>` : ''}
@@ -1060,7 +1249,7 @@ function historicoCliente(id) {
       ${orcs.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum orçamento.</div>'}` : ''}
     ${DB.pode('laudos') ? `<h3>Laudos</h3>${lds.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th>Pragas</th><th>Garantia até</th></tr></thead><tbody>
       ${lds.map((l) => `<tr><td>${l.numero}</td><td>${dataBR(l.data)}</td><td>${esc(l.pragas)}</td><td>${l.garantiaDias ? dataBR(somarDias(l.data, l.garantiaDias)) : '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum laudo.</div>'}` : ''}
-  `);
+  `;
 }
 
 /* =====================================================================
@@ -1210,7 +1399,7 @@ function totalOrcamento(o) {
 }
 
 // Filtro, busca e página da lista de orçamentos ficam guardados ao voltar à tela.
-const estadoOrc = { pagina: 1, filtro: 'geral', numero: '', cliente: '' };
+const estadoOrc = carregarEstado('orcamentos', { pagina: 1, filtro: 'geral', numero: '', cliente: '' });
 const FILTROS_ORC = [['geral', 'Geral'], ['numero', 'Por Número'], ['cancelado', 'Cancelado'], ['finalizado', 'Finalizado'],
   ['executado', 'Executado'], ['em_execucao', 'Em Execução'], ['pendente', 'Pendente']];
 
@@ -1255,6 +1444,7 @@ function orcamentos(el) {
       lista.sort((a, b) => b.numero - a.numero);
     }
     const { itens, html: rodape } = paginar(lista, estadoOrc);
+    guardarEstado('orcamentos', estadoOrc);
     const vazio = estadoOrc.filtro === 'numero' && !digitos(estadoOrc.numero) ? 'Digite o número do orçamento.' : 'Nenhum orçamento encontrado.';
     $('#lista-orc', el).innerHTML = itens.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Cliente</th><th>Vendedor</th><th class="num">Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>
       ${itens.map((o) => {

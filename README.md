@@ -101,6 +101,9 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
 - **Filtros de orçamentos**: Geral, Por Número, Cancelado, Finalizado, Executado, Em Execução e
   Pendente, com busca por cliente (código ou nome) e paginação.
 - **Filtros de clientes**: Razão Social, Fantasia, CNPJ/CPF, Cidade, Código e situação Ativo/Inativo.
+- **Página do cliente**: ao clicar no nome (ou em Editar/Histórico), o cliente abre numa página
+  própria com as abas **Dados do cliente**, **Anotações** e **Histórico**. Em Anotações dá para
+  incluir, editar, inativar e reativar anotações internas; cada uma guarda a data e quem escreveu.
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em
