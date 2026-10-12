@@ -104,6 +104,12 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
 - **Página do cliente**: ao clicar no nome (ou em Editar/Histórico), o cliente abre numa página
   própria com as abas **Dados do cliente**, **Anotações** e **Histórico**. Em Anotações dá para
   incluir, editar, inativar e reativar anotações internas; cada uma guarda a data e quem escreveu.
+- **Avisos de contas a pagar**: cadastre a conta em **Financeiro → + Despesa** com o vencimento.
+  O sininho no topo mostra as contas **vencidas**, que **vencem hoje** e que **vencem amanhã**
+  (para quem tem acesso ao Financeiro). Clicando em **Ativar avisos neste aparelho**, o celular ou
+  computador mostra a notificação "Amanhã vence: ..." uma vez por dia por conta, quando o sistema
+  estiver aberto ou instalado. Em Financeiro, o filtro **Contas a pagar em aberto** lista todas as
+  contas não pagas, de qualquer mês.
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em

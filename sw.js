@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do sistema para abrir mais rápido.
 // Os dados em si vêm sempre do banco (as requisições ao Supabase não passam pelo cache).
-const CACHE = 'berbert-v12';
+const CACHE = 'berbert-v13';
 const ARQUIVOS = [
   './', './index.html', './css/style.css', './manifest.json',
   './js/vendor/supabase.js', './js/config.js', './js/db.js', './js/app.js',
@@ -15,6 +15,16 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))));
   self.clients.claim();
+});
+
+// Ao tocar numa notificação (ex.: conta a vencer), abre o sistema na tela do Financeiro.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((lista) => {
+    const aberto = lista.find((c) => c.url.startsWith(self.registration.scope));
+    if (aberto) { aberto.postMessage({ abrir: 'financeiro' }); return aberto.focus(); }
+    return self.clients.openWindow(self.registration.scope);
+  }));
 });
 
 // Busca na rede primeiro (para pegar atualizações) e usa o cache se estiver offline.

@@ -131,13 +131,13 @@ function campo(rotulo, nome, valor = '', tipo = 'text', extra = '') {
 function confirmar(msg) {
   return window.confirm(msg);
 }
-function avisar(msg, tipo = 'ok') {
+function avisar(msg, tipo = 'ok', duracao) {
   const el = $('#aviso-flutuante');
   el.textContent = msg;
   el.className = tipo;
   el.hidden = false;
   clearTimeout(avisar.t);
-  avisar.t = setTimeout(() => (el.hidden = true), tipo === 'erro' ? 6000 : 2500);
+  avisar.t = setTimeout(() => (el.hidden = true), duracao || (tipo === 'erro' ? 6000 : 2500));
 }
 // Executa uma ação assíncrona de um formulário, travando o botão enquanto salva.
 async function enviando(botao, acao) {
@@ -165,6 +165,7 @@ const ICONES = {
   funcionarios: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  sino: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   conta: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
   senha: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   sair: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
@@ -391,11 +392,113 @@ function render() {
   $('#menu').classList.remove('aberto');
   window.scrollTo(0, 0);
   r.fn($('#view'), resto.join('/'));
+  atualizarNotificacoes();
 }
 // Busca alterações feitas por outros funcionários (ao trocar de tela ou voltar ao app).
+/* ---------- Notificações de contas a pagar ---------- */
+// Contas a pagar (despesas não pagas) vencidas, que vencem hoje ou amanhã.
+function alertasContas() {
+  if (!DB.perfil() || !DB.pode('financeiro')) return [];
+  const hoje = hojeISO(), amanha = somarDias(hoje, 1);
+  return DB.listar('financeiro')
+    .filter((f) => f.tipo === 'despesa' && !f.pago && f.vencimento && f.vencimento <= amanha)
+    .map((f) => ({ f, quando: f.vencimento < hoje ? 'vencida' : f.vencimento === hoje ? 'hoje' : 'amanha' }))
+    .sort((a, b) => a.f.vencimento.localeCompare(b.f.vencimento));
+}
+const TEXTO_ALERTA = { amanha: 'Vence amanhã', hoje: 'Vence hoje', vencida: 'Vencida' };
+const COR_ALERTA = { amanha: 'amarelo', hoje: 'laranja', vencida: 'vermelho' };
+
+function atualizarNotificacoes() {
+  const caixa = $('#notif');
+  if (!DB.perfil() || !DB.pode('financeiro')) { caixa.hidden = true; return; }
+  caixa.hidden = false;
+  const alertas = alertasContas();
+  $('#notif-btn').innerHTML = icone('sino') + (alertas.length ? `<span class="notif-badge">${alertas.length > 99 ? '99+' : alertas.length}</span>` : '');
+  const permissao = 'Notification' in window ? Notification.permission : 'indisponivel';
+  $('#notif-painel').innerHTML = `
+    <div class="notif-cab">Contas a pagar</div>
+    ${alertas.length ? alertas.map(({ f, quando }) => `<button class="notif-item" data-conta="${f.id}">
+        <span class="tag ${COR_ALERTA[quando]}">${TEXTO_ALERTA[quando]}</span>
+        <b>${esc(f.descricao)}</b>
+        <small>${moeda(f.valor)} · vencimento ${dataBR(f.vencimento)}</small>
+      </button>`).join('') : '<div class="notif-vazio">Nenhuma conta vencida ou vencendo hoje e amanhã.</div>'}
+    <div class="notif-rodape">
+      <button class="btn sec peq" id="notif-ver">Ver contas a pagar</button>
+      ${permissao === 'default' ? '<button class="btn peq" id="notif-ativar">Ativar avisos neste aparelho</button>' : ''}
+      ${permissao === 'denied' ? '<span class="ajuda" style="margin:0">Avisos bloqueados no navegador. Libere nas configurações do site.</span>' : ''}
+    </div>`;
+  notificarAparelho(alertas);
+}
+function abrirContasAPagar() {
+  $('#notif-painel').hidden = true;
+  estadoFin.tipo = 'apagar';
+  if (rotaAtual() === 'financeiro') render(); else irPara('financeiro');
+}
+$('#notif-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const p = $('#notif-painel');
+  p.hidden = !p.hidden;
+  $('#notif-btn').setAttribute('aria-expanded', String(!p.hidden));
+});
+$('#notif-painel').addEventListener('click', async (e) => {
+  if (e.target.closest('#notif-ativar')) {
+    await Notification.requestPermission();
+    atualizarNotificacoes();
+    if (Notification.permission === 'granted') avisar('Pronto! Este aparelho vai avisar das contas a vencer.');
+    return;
+  }
+  if (e.target.closest('#notif-ver') || e.target.closest('[data-conta]')) abrirContasAPagar();
+});
+document.addEventListener('click', (e) => {
+  if (!$('#notif-painel').hidden && !e.target.closest('#notif')) $('#notif-painel').hidden = true;
+});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.abrir === 'financeiro' && DB.perfil()) abrirContasAPagar(); });
+}
+
+// Mostra a notificação do aparelho (celular/computador) uma vez por dia para cada conta.
+let resumoMostrado = false;
+async function notificarAparelho(alertas) {
+  const hoje = hojeISO();
+  const avisar1x = alertas.filter(({ quando }) => quando !== 'vencida');
+  if (!resumoMostrado && alertas.length) {
+    resumoMostrado = true;
+    const amanha = alertas.filter((a) => a.quando === 'amanha');
+    const msg = amanha.length === 1 ? `Amanhã vence: ${amanha[0].f.descricao} (${moeda(amanha[0].f.valor)})`
+      : `Você tem ${alertas.length} conta(s) a pagar vencida(s) ou vencendo. Veja no sininho.`;
+    avisar(msg, 'ok', 7000);
+  }
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const vencidas = alertas.filter((a) => a.quando === 'vencida');
+  const pendentes = avisar1x.map(({ f, quando }) => ({
+    chave: `berbert-notif-${f.id}-${quando}-${hoje}`,
+    titulo: quando === 'amanha' ? 'Conta vence amanhã' : 'Conta vence hoje',
+    corpo: `${quando === 'amanha' ? 'Amanhã' : 'Hoje'} vence: ${f.descricao} — ${moeda(f.valor)}`,
+    tag: `conta-${f.id}`,
+  }));
+  if (vencidas.length) {
+    pendentes.push({ chave: `berbert-notif-vencidas-${hoje}`, titulo: 'Contas vencidas',
+      corpo: `${vencidas.length} conta(s) a pagar já venceu(ram) e não foi(ram) paga(s).`, tag: 'contas-vencidas' });
+  }
+  for (const n of pendentes) {
+    try { if (localStorage.getItem(n.chave)) continue; localStorage.setItem(n.chave, '1'); } catch { /* sem armazenamento */ }
+    const opcoes = { body: n.corpo, icon: 'img/icon-192.png', badge: 'img/favicon.png', tag: n.tag };
+    try {
+      const reg = 'serviceWorker' in navigator && await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.showNotification(n.titulo, opcoes); else new Notification(n.titulo, opcoes);
+    } catch { /* navegador não permitiu */ }
+  }
+}
+// Confere as contas de tempos em tempos (inclusive lançadas por outros funcionários).
+setInterval(async () => {
+  if (!DB.perfil() || $('#app').hidden) return;
+  if (DB.carregadoHa() > 10 * 60 * 1000) { try { await DB.carregar(); } catch { /* tenta depois */ } }
+  atualizarNotificacoes();
+}, 15 * 60 * 1000);
+
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-12.1';
+const VERSAO_APP = '2026-10-12.2';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -1859,10 +1962,15 @@ function imprimirLaudo(l) {
 const estadoFin = { mes: hojeISO().slice(0, 7), tipo: '' };
 
 function financeiro(el) {
-  const hoje = hojeISO();
+  const hoje = hojeISO(), amanha = somarDias(hoje, 1);
   const doMes = DB.listar('financeiro').filter((f) => (f.vencimento || '').startsWith(estadoFin.mes));
-  const lista = doMes.filter((f) => !estadoFin.tipo || f.tipo === estadoFin.tipo)
+  // "Contas a pagar/receber em aberto" mostra tudo que não foi pago, de qualquer mês.
+  const emAberto = { apagar: 'despesa', areceber: 'receita' }[estadoFin.tipo];
+  const lista = (emAberto
+    ? DB.listar('financeiro').filter((f) => f.tipo === emAberto && !f.pago)
+    : doMes.filter((f) => !estadoFin.tipo || f.tipo === estadoFin.tipo))
     .sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || ''));
+  const somaLista = (fn) => lista.filter(fn).reduce((s, f) => s + num(f.valor), 0);
   const soma = (fn) => doMes.filter(fn).reduce((s, f) => s + num(f.valor), 0);
   const receitas = soma((f) => f.tipo === 'receita');
   const despesas = soma((f) => f.tipo === 'despesa');
@@ -1872,21 +1980,29 @@ function financeiro(el) {
   el.innerHTML = `
     <div class="cabecalho"><h2>Financeiro</h2>
       <div class="acoes">
-        <input type="month" class="busca" style="min-width:0" id="mes" value="${estadoFin.mes}">
-        <select class="busca" style="min-width:0" id="tipo">${opcoes([['', 'Todos'], ['receita', 'Receitas'], ['despesa', 'Despesas']], estadoFin.tipo)}</select>
+        <input type="month" class="busca" style="min-width:0" id="mes" value="${estadoFin.mes}" ${emAberto ? 'hidden' : ''}>
+        <select class="busca" style="min-width:0" id="tipo">${opcoes([['', 'Todos'], ['receita', 'Receitas'], ['despesa', 'Despesas'],
+          ['apagar', 'Contas a pagar em aberto'], ['areceber', 'Contas a receber em aberto']], estadoFin.tipo)}</select>
         <button class="btn" id="nova-rec">+ Receita</button>
         <button class="btn perigo" id="nova-desp">+ Despesa</button>
       </div></div>
-    <div class="grade-kpi">
+    ${emAberto ? `<div class="grade-kpi">
+      <div class="kpi"><div class="rotulo">Total ${emAberto === 'despesa' ? 'a pagar' : 'a receber'} em aberto</div><div class="valor">${moeda(somaLista(() => true))}</div></div>
+      <div class="kpi"><div class="rotulo">Vencidas</div><div class="valor" style="color:var(--vermelho)">${moeda(somaLista((f) => f.vencimento < hoje))}</div></div>
+      <div class="kpi"><div class="rotulo">Vencem hoje e amanhã</div><div class="valor" style="color:#a64500">${moeda(somaLista((f) => f.vencimento === hoje || f.vencimento === amanha))}</div></div>
+      <div class="kpi"><div class="rotulo">Próximos 30 dias</div><div class="valor">${moeda(somaLista((f) => f.vencimento > amanha && f.vencimento <= somarDias(hoje, 30)))}</div></div>
+    </div>` : `<div class="grade-kpi">
       <div class="kpi"><div class="rotulo">Receitas do mês</div><div class="valor" style="color:var(--primaria)">${moeda(receitas)}</div></div>
       <div class="kpi"><div class="rotulo">Despesas do mês</div><div class="valor" style="color:var(--vermelho)">${moeda(despesas)}</div></div>
       <div class="kpi"><div class="rotulo">Resultado previsto</div><div class="valor">${moeda(receitas - despesas)}</div></div>
       <div class="kpi"><div class="rotulo">Recebido / a receber</div><div class="valor" style="font-size:18px">${moeda(recebido)} / ${moeda(aReceber)}</div></div>
-    </div>
+    </div>`}
     <div class="cartao" style="padding:0">${lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Cliente</th><th>Categoria</th><th class="num">Valor</th><th>Situação</th><th>Ações</th></tr></thead><tbody>
       ${lista.map((f) => {
         const sit = f.pago ? `<span class="tag verde">${f.tipo === 'receita' ? 'Recebido' : 'Pago'}${f.dataPagamento ? ' ' + dataBR(f.dataPagamento) : ''}</span>`
-          : f.vencimento < hoje ? '<span class="tag vermelho">Vencido</span>' : '<span class="tag amarelo">Em aberto</span>';
+          : f.vencimento < hoje ? '<span class="tag vermelho">Vencido</span>'
+          : f.vencimento === hoje ? '<span class="tag laranja">Vence hoje</span>'
+          : f.vencimento === amanha ? '<span class="tag amarelo">Vence amanhã</span>' : '<span class="tag cinza">Em aberto</span>';
         return `<tr><td>${dataBR(f.vencimento)}</td><td>${esc(f.descricao)}</td><td>${f.clienteId ? esc(nomeCliente(f.clienteId)) : ''}</td><td>${esc(f.categoria)}</td>
         <td class="num" style="color:${f.tipo === 'receita' ? 'var(--primaria)' : 'var(--vermelho)'}">${f.tipo === 'despesa' ? '- ' : ''}${moeda(f.valor)}</td><td>${sit}</td>
         <td><div class="acoes">
@@ -1895,7 +2011,7 @@ function financeiro(el) {
           <button class="btn sec peq" data-acao="excluir" data-id="${f.id}">Excluir</button>
         </div></td></tr>`;
       }).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhum lançamento neste mês.</div>'}</div>`;
+    </tbody></table></div>` : `<div class="vazio">${emAberto ? 'Nenhuma conta em aberto.' : 'Nenhum lançamento neste mês.'}</div>`}</div>`;
 
   $('#mes', el).addEventListener('change', (e) => { estadoFin.mes = e.target.value || hojeISO().slice(0, 7); financeiro(el); });
   $('#tipo', el).addEventListener('change', (e) => { estadoFin.tipo = e.target.value; financeiro(el); });
@@ -2175,6 +2291,9 @@ $('#form-login').addEventListener('submit', async (e) => {
 
 async function sair() {
   abrirMenuPerfil(false);
+  $('#notif').hidden = true;
+  $('#notif-painel').hidden = true;
+  resumoMostrado = false;
   await DB.sair();
   rotaAtiva = 'painel';
   try { sessionStorage.removeItem('berbert-rota'); } catch { /* sem armazenamento */ }
