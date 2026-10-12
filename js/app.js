@@ -482,7 +482,7 @@ async function notificarAparelho(alertas) {
   }
   for (const n of pendentes) {
     try { if (localStorage.getItem(n.chave)) continue; localStorage.setItem(n.chave, '1'); } catch { /* sem armazenamento */ }
-    const opcoes = { body: n.corpo, icon: 'img/icon-192.png', badge: 'img/favicon.png', tag: n.tag };
+    const opcoes = { body: n.corpo, icon: 'img/app-192.png', badge: 'img/favicon.png', tag: n.tag };
     try {
       const reg = 'serviceWorker' in navigator && await navigator.serviceWorker.getRegistration();
       if (reg) await reg.showNotification(n.titulo, opcoes); else new Notification(n.titulo, opcoes);
@@ -498,7 +498,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-12.2';
+const VERSAO_APP = '2026-10-12.3';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });

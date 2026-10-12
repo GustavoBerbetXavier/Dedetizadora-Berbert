@@ -1,10 +1,10 @@
 // Service worker: guarda os arquivos do sistema para abrir mais rápido.
 // Os dados em si vêm sempre do banco (as requisições ao Supabase não passam pelo cache).
-const CACHE = 'berbert-v13';
+const CACHE = 'berbert-v14';
 const ARQUIVOS = [
   './', './index.html', './css/style.css', './manifest.json',
   './js/vendor/supabase.js', './js/config.js', './js/db.js', './js/app.js',
-  './img/logo-clara.webp', './img/logo-escura.webp', './img/icon-192.png', './img/icon-512.png', './img/favicon.png',
+  './img/logo-clara.webp', './img/logo-escura.webp', './img/app-192.png', './img/app-512.png', './img/app-maskable-512.png', './img/app-apple-180.png', './img/favicon.png',
 ];
 
 self.addEventListener('install', (e) => {
