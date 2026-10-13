@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>henri.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;600&display=swap">
+<style>
+/* Layout: one column, oversized wordmark, then a loose grid of "favorite things" tiles */
+:root{
+  --bg:#f3f6ff; --fg:#141a33; --muted:#59618a; --accent:#2b4bff; --sun:#ffc93c; --card:#ffffff; --line:#d9def5;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1226; --fg:#eef1ff; --muted:#9aa3cf; --accent:#7d93ff; --sun:#ffd25e; --card:#171c38; --line:#2a3160; color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e1226; --fg:#eef1ff; --muted:#9aa3cf; --accent:#7d93ff; --sun:#ffd25e; --card:#171c38; --line:#2a3160; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:400 1.05rem/1.6 var(--body);margin:0}
+.wrap{max-width:60rem;margin:0 auto;padding-inline:16px;padding-block:2rem 4rem;display:flex;flex-direction:column;gap:3.5rem}
+nav{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;font-weight:600}
+nav a{color:var(--muted);text-decoration:none;margin-left:1.2rem}
+nav a:hover,nav a:focus-visible{color:var(--accent)}
+.url{font-family:var(--display);font-weight:800;letter-spacing:-.01em}
+.url span{color:var(--accent)}
+header{display:flex;flex-direction:column;gap:1.2rem}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(4rem,17vw,10.5rem);line-height:.85;letter-spacing:-.05em;margin:0;text-wrap:balance}
+h1 .dot{color:var(--sun)}
+h1 .tld{color:var(--accent)}
+.lead{font-size:clamp(1.15rem,2.6vw,1.45rem);max-width:34ch;margin:0;color:var(--muted)}
+.lead strong{color:var(--fg)}
+h2{font-family:var(--display);font-weight:800;font-size:2rem;letter-spacing:-.02em;margin:0 0 1rem}
+.eyebrow{font-size:.78rem;text-transform:uppercase;letter-spacing:.14em;color:var(--accent);font-weight:600;margin:0 0 .4rem}
+.about p{max-width:62ch;margin:0 0 .8rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1.2rem;display:flex;flex-direction:column;gap:.35rem;transition:transform .2s}
+.tile:hover{transform:translateY(-3px) rotate(-.6deg)}
+.tile b{font-family:var(--display);font-size:1.25rem}
+.tile small{color:var(--muted);font-size:.95rem}
+.oi{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.5rem;background:var(--accent);color:#fff;border-radius:20px;padding:1.6rem}
+.oi h2{color:#fff;margin:0;flex:1 1 16rem}
+button{font:800 1.1rem var(--display);background:var(--sun);color:#141a33;border:0;border-radius:999px;padding:.85rem 1.6rem;cursor:pointer;transition:transform .15s}
+button:hover{transform:scale(1.05)}
+button:focus-visible,nav a:focus-visible{outline:3px solid var(--fg);outline-offset:3px}
+#msg{flex-basis:100%;margin:0;font-weight:600;min-height:1.6em}
+footer{color:var(--muted);font-size:.9rem;border-top:1px solid var(--line);padding-top:1.2rem}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <div class="url">henri<span>.com</span></div>
+    <div><a href="#sobre">Sobre</a><a href="#favoritos">Favoritos</a><a href="#oi">Dizer oi</a></div>
+  </nav>
+
+  <header>
+    <h1>henri<span class="dot">.</span><span class="tld">com</span></h1>
+    <p class="lead">Oi! Esse é o cantinho do <strong>Henri</strong> na internet.</p>
+  </header>
+
+  <section class="about" id="sobre">
+    <p class="eyebrow">Sobre</p>
+    <h2>Quem é o Henri</h2>
+    <p>Aqui é onde o Henri conta um pouco sobre si: do que gosta, o que anda fazendo e o que quer aprender.</p>
+    <p>Esse texto é só o começo. Dá pra trocar por qualquer coisa: uma apresentação, uma história engraçada ou os planos para o ano.</p>
+  </section>
+
+  <section id="favoritos">
+    <p class="eyebrow">Favoritos</p>
+    <h2>Coisas que o Henri curte</h2>
+    <div class="grid">
+      <div class="tile"><b>Jogos</b><small>O jogo favorito do momento vai aqui.</small></div>
+      <div class="tile"><b>Música</b><small>A banda ou a música que não sai da cabeça.</small></div>
+      <div class="tile"><b>Comida</b><small>O prato que nunca dá pra recusar.</small></div>
+      <div class="tile"><b>Esporte</b><small>O time ou o esporte preferido.</small></div>
+    </div>
+  </section>
+
+  <section class="oi" id="oi">
+    <h2>Mande um oi pro Henri</h2>
+    <button id="btn" type="button">Dizer oi 👋</button>
+    <p id="msg" aria-live="polite"></p>
+  </section>
+
+  <footer>© <span id="ano">2026</span> henri.com · feito com carinho</footer>
+</div>
+
+<script>
+const frases=["O Henri agradece o oi!","Oi recebido com sucesso.","O Henri mandou um joinha de volta.","Mais um oi pra coleção!","O Henri está sorrindo agora."];
+let n=0;try{n=+localStorage.getItem("henri-oi")||0}catch(e){}
+const msg=document.getElementById("msg");
+const show=()=>{if(n)msg.textContent=`Você já disse oi ${n} ${n===1?"vez":"vezes"}.`};
+show();
+document.getElementById("btn").addEventListener("click",()=>{
+  n++;try{localStorage.setItem("henri-oi",n)}catch(e){}
+  msg.textContent=`${frases[Math.floor(Math.random()*frases.length)]} (${n} ${n===1?"oi":"ois"})`;
+});
+document.getElementById("ano").textContent=new Date().getFullYear();
+</script>
+</body>
+</html>
