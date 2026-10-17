@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-17.6';
+const VERSAO_APP = '2026-10-17.7';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2395,7 +2395,9 @@ function cadastros(el) {
   const def = DEF_CADASTRO[abaCadastro];
   const lista = DB.catalogo(abaCadastro);
   el.innerHTML = `
-    <div class="cabecalho"><h2>Cadastros</h2><button class="btn" id="novo-item">+ Novo ${def.singular}</button></div>
+    <div class="cabecalho"><h2>Cadastros</h2><div class="acoes">
+      ${abaCadastro !== 'colaboradores' ? '<button class="btn sec" id="importar-itens">Importar planilha</button>' : ''}
+      <button class="btn" id="novo-item">+ Novo ${def.singular}</button></div></div>
     <p class="ajuda">Serviços, colaboradores e produtos usados na criação das ordens de serviço.</p>
     <div class="abas">${Object.entries(DEF_CADASTRO).map(([k, d]) => `<button class="aba ${abaCadastro === k ? 'ativa' : ''}" data-aba="${k}">${d.titulo} <span class="cont">${DB.catalogo(k).length}</span></button>`).join('')}</div>
     <div class="cartao" style="padding:0" id="lista-cad">${lista.length ? `<div class="tabela-wrap"><table><thead><tr>${def.colunas.map(([, r]) => `<th>${r}</th>`).join('')}<th>Situação</th><th>Ações</th></tr></thead><tbody>
@@ -2413,6 +2415,8 @@ function cadastros(el) {
     if (b) { abaCadastro = b.dataset.aba; cadastros(el); }
   });
   $('#novo-item', el).addEventListener('click', () => formCadastro(abaCadastro, null, () => cadastros(el)));
+  const imp = $('#importar-itens', el);
+  if (imp) imp.addEventListener('click', () => importarItensCadastro(() => cadastros(el)));
   const ex = $('#exemplos', el);
   if (ex) ex.addEventListener('click', () => enviando(ex, async () => {
     await DB.salvarCatalogo(abaCadastro, EXEMPLOS_CADASTRO[abaCadastro].map((x) => ({ ...x, id: DB.novoId(), ativo: true })));
@@ -2470,6 +2474,148 @@ function formCadastro(tipo, id, aoSalvar) {
       });
     });
   });
+}
+
+// Importa serviços e produtos de uma planilha de itens (ex.: a lista de itens do sistema antigo).
+// Cada linha pode ir para Serviços, Produtos ou ficar de fora; o app sugere pelo tipo, NCM e descrição.
+const CAMPOS_IMPORTACAO_ITENS = [
+  ['codigo', 'Código', ['codigo', 'cod', 'codigo do item', 'id']],
+  ['descricao', 'Descrição *', ['descricao', 'nome', 'item', 'produto', 'servico', 'descricao do item']],
+  ['valor', 'Valor', ['valor de venda', 'valor', 'preco', 'preco de venda', 'valor venda']],
+  ['tipo', 'Tipo', ['tipo', 'tipo do item']],
+  ['ncm', 'NCM', ['ncm']],
+  ['unidade', 'Unidade', ['unidade', 'un', 'und']],
+  ['situacao', 'Situação', ['situacao', 'status', 'ativo']],
+];
+const PALAVRAS_SERVICO = /^(limpeza|dedetiz|desratiz|descupin|desentup|instalac|tratamento|retirada|revestimento|fechamento|capina|manutenc|reforco|sanitiz|troca|visita|orcamento|renovac|deslocamento|esvaziamento|aplicac|boia|repelente)/;
+function destinoSugerido(item) {
+  if (normalizar(item.situacao).startsWith('inativ')) return '';
+  if (PALAVRAS_SERVICO.test(normalizar(item.descricao))) return 'servicos';
+  if (digitos(item.ncm).startsWith('3808')) return 'produtos';
+  return normalizar(item.tipo).startsWith('servi') ? 'servicos' : '';
+}
+
+function importarItensCadastro(aoTerminar) {
+  abrirModal('Importar serviços e produtos de planilha', `
+    <div class="importacao">
+      <p>Escolha o arquivo <b>.csv</b> com os itens. A primeira linha deve ter os nomes das colunas
+        (por exemplo: codigo; descricao; valor de venda; tipo; situacao).</p>
+      <p class="ajuda">Para cada linha você escolhe se ela entra como <b>serviço</b>, como <b>produto</b> (veneno/isca usado na ficha FAES)
+        ou se fica de fora. Itens que já existem (mesmo código ou mesma descrição) são atualizados, sem duplicar.</p>
+      <div class="acoes"><label class="btn">Escolher arquivo .csv<input type="file" id="arquivo-csv" accept=".csv,text/csv,.txt" hidden></label></div>
+      <div id="etapa-itens"></div>
+    </div>`, (raiz) => {
+    $('#arquivo-csv', raiz).addEventListener('change', async (e) => {
+      const arq = e.target.files[0];
+      e.target.value = '';
+      if (!arq) return;
+      try {
+        const linhas = lerCSV(await lerArquivoTexto(arq));
+        if (linhas.length < 2) throw new Error('O arquivo precisa ter a linha de títulos e pelo menos um item.');
+        const mapa = sugerirColunas(linhas[0].map((c) => c.trim()), CAMPOS_IMPORTACAO_ITENS);
+        if (mapa.descricao === undefined) throw new Error('Não encontrei a coluna de descrição do item.');
+        etapaItens($('#etapa-itens', raiz), arq.name, linhas.slice(1), mapa, aoTerminar);
+      } catch (err) {
+        avisar('Não foi possível ler o arquivo: ' + err.message, 'erro');
+      }
+    });
+  });
+}
+
+function etapaItens(el, nomeArquivo, corpo, mapa, aoTerminar) {
+  const v = (linha, k) => (mapa[k] === undefined ? '' : String(linha[mapa[k]] ?? '').trim());
+  const itens = corpo.map((linha) => ({
+    codigo: v(linha, 'codigo').replace(/\.0+$/, ''), descricao: v(linha, 'descricao').replace(/\s+/g, ' ').trim(),
+    valor: valorImportado(v(linha, 'valor')), tipo: v(linha, 'tipo'), ncm: v(linha, 'ncm'),
+    unidade: v(linha, 'unidade'), situacao: v(linha, 'situacao'),
+  })).filter((x) => x.descricao);
+  itens.forEach((x) => (x.destino = destinoSugerido(x)));
+  // Mesma descrição repetida no arquivo: a primeira vale, as outras ficam de fora (pode mudar).
+  const vistos = new Set();
+  itens.forEach((x) => {
+    if (!x.destino) return;
+    const k = x.destino + ':' + normalizar(x.descricao);
+    if (vistos.has(k)) { x.destino = ''; x.repetido = true; } else vistos.add(k);
+  });
+
+  // Procura o item já cadastrado: pelo código ou, se o cadastrado não tiver código, pela descrição/nome.
+  const existente = (x, destino, lista = DB.catalogo(destino), usados = new Set()) => {
+    const nome = (y) => normalizar(destino === 'servicos' ? y.descricao : y.nome);
+    const livres = lista.filter((y) => !usados.has(y.id));
+    return (x.codigo && livres.find((y) => String(y.codigo || '') === x.codigo))
+      || livres.find((y) => (!y.codigo || !x.codigo) && nome(y) === normalizar(x.descricao));
+  };
+  const OPCOES = [['servicos', 'Serviço'], ['produtos', 'Produto'], ['', 'Não importar']];
+  el.innerHTML = `
+    <h3>Arquivo: ${esc(nomeArquivo)} (${itens.length} itens)</h3>
+    <div class="acoes"><span class="ajuda">Mudar todos os da lista para:</span>
+      ${OPCOES.map(([k, r]) => `<button type="button" class="btn sec peq" data-todos="${k}">${r}</button>`).join('')}</div>
+    <div class="tabela-wrap itens-import"><table><thead><tr><th>Cód.</th><th>Descrição</th><th>No arquivo</th><th class="num">Valor</th><th>Importar como</th><th></th></tr></thead><tbody>
+      ${itens.map((x, i) => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.descricao)}</td>
+        <td>${esc([x.tipo, x.situacao].filter(Boolean).join(' · '))}${x.repetido ? ' <span class="tag amarelo">repetido</span>' : ''}</td>
+        <td class="num">${moeda(x.valor)}</td>
+        <td><select data-item="${i}">${OPCOES.map(([k, r]) => `<option value="${k}" ${x.destino === k ? 'selected' : ''}>${r}</option>`).join('')}</select></td>
+        <td data-estado="${i}"></td></tr>`).join('')}
+    </tbody></table></div>
+    <div id="resumo-itens" class="resumo-importacao"></div>
+    <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
+      <button type="button" class="btn" id="confirmar-itens">Importar</button></div>`;
+
+  const atualizarResumo = () => {
+    const cont = { servicos: [0, 0], produtos: [0, 0] };
+    const usados = new Set();
+    itens.forEach((x, i) => {
+      const cel = $(`[data-estado="${i}"]`, el);
+      if (!x.destino) { cel.innerHTML = ''; return; }
+      const ja = existente(x, x.destino, undefined, usados);
+      if (ja) usados.add(ja.id);
+      cont[x.destino][ja ? 1 : 0]++;
+      cel.innerHTML = ja ? '<span class="tag cinza">já existe, atualiza</span>' : '<span class="tag verde">novo</span>';
+    });
+    const fora = itens.filter((x) => !x.destino).length;
+    $('#resumo-itens', el).innerHTML = `
+      <span class="tag verde">Serviços: ${cont.servicos[0]} novos${cont.servicos[1] ? `, ${cont.servicos[1]} atualizados` : ''}</span>
+      <span class="tag laranja">Produtos: ${cont.produtos[0]} novos${cont.produtos[1] ? `, ${cont.produtos[1]} atualizados` : ''}</span>
+      ${fora ? `<span class="tag cinza">${fora} ficam de fora</span>` : ''}`;
+    $('#confirmar-itens', el).disabled = fora === itens.length;
+  };
+  el.addEventListener('change', (e) => {
+    const s = e.target.closest('[data-item]');
+    if (s) { itens[s.dataset.item].destino = s.value; atualizarResumo(); }
+  });
+  $$('[data-todos]', el).forEach((b) => b.addEventListener('click', () => {
+    itens.forEach((x) => (x.destino = b.dataset.todos));
+    $$('[data-item]', el).forEach((s) => (s.value = b.dataset.todos));
+    atualizarResumo();
+  }));
+  $('[data-cancelar]', el).addEventListener('click', fecharModal);
+  $('#confirmar-itens', el).addEventListener('click', (e) => enviando(e.target, async () => {
+    const res = [];
+    for (const destino of ['servicos', 'produtos']) {
+      const lista = DB.catalogo(destino).map((y) => ({ ...y }));
+      let novos = 0, atualizados = 0;
+      const usados = new Set();
+      for (const x of itens.filter((y) => y.destino === destino)) {
+        const base = destino === 'servicos'
+          ? { descricao: x.descricao, ...(x.valor > 0 ? { valor: x.valor } : {}) }
+          : { nome: x.descricao };
+        const dados = { ...base, ...(x.codigo ? { codigo: x.codigo } : {}), ...(x.unidade ? { unidade: x.unidade } : {}) };
+        const alvo = existente(x, destino, lista, usados);
+        if (alvo) { Object.assign(alvo, dados); usados.add(alvo.id); atualizados++; } else {
+          lista.push({ ...(destino === 'servicos' ? { valor: 0 } : {}), ...dados, id: DB.novoId(), ativo: true });
+          novos++;
+        }
+      }
+      if (novos || atualizados) {
+        await DB.salvarCatalogo(destino, lista);
+        res.push(`${destino === 'servicos' ? 'Serviços' : 'Produtos'}: ${novos} novos, ${atualizados} atualizados`);
+      }
+    }
+    fecharModal();
+    avisar((res.join('. ') || 'Nada importado') + '.');
+    aoTerminar();
+  }));
+  atualizarResumo();
 }
 
 /* =====================================================================

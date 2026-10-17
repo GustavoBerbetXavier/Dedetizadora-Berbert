@@ -370,3 +370,5 @@ td.num, th.num { text-align: right; }
 .doc .assinatura { margin-top: 60px; display: flex; justify-content: space-around; gap: 30px; }
 .doc .assinatura div { border-top: 1px solid #000; padding-top: 5px; text-align: center; min-width: 220px; font-size: 12px; }
 .doc .info { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 20px; }
+.itens-import { max-height: 420px; overflow: auto; margin: 8px 0 12px; }
+.itens-import select { min-width: 130px; }
