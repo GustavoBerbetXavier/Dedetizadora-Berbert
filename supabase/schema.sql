@@ -240,3 +240,7 @@ $fn$;
 
 grant execute on function public.os_publica(text) to anon, authenticated;
 grant execute on function public.os_enviar(text, jsonb) to anon, authenticated;
+
+-- ============================================================
+-- FIM DO ARQUIVO. Se esta linha aparece no editor, o texto foi copiado inteiro.
+-- ============================================================
