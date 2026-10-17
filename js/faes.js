@@ -22,6 +22,13 @@ const FAES = (() => {
     return c ? `${c.codigo ? c.codigo + ' - ' : ''}${c.nome}` : '';
   };
 
+  // Nome do técnico na ficha: o do cadastro (com código); se ele digitou outro nome, o digitado.
+  const nomeControlador = (digitado, cadastro) => {
+    const d = String(digitado || '').trim();
+    if (!d) return cadastro;
+    return cadastro && cadastro.toUpperCase().endsWith(d.toUpperCase()) ? cadastro : d;
+  };
+
   // Documento da FAES no formato da ficha em papel, preenchido com o que houver.
   function documento({ ordem: o, cliente: c = {}, empresa: e = {}, colaboradores = [], produtos = [] }) {
     const x = o.execucao || {};
@@ -87,7 +94,8 @@ const FAES = (() => {
         <tr><th colspan="3">COMPROVANTE DE EXECUÇÃO DO SERVIÇO — Data da execução: ${dataBR(x.dataExecucao) || '____/____/______'}
           &nbsp; | &nbsp; Em caso de intoxicação ligar para: ${esc(e.telefoneIntoxicacao || '0800-771-3733')}</th></tr>
         <tr class="faes-assin">
-          <td><b>Controlador de pragas</b><br>Nome: ${esc(colab(colaboradores, o.controlador))}<div class="faes-linha"></div>Assinatura</td>
+          <td><b>Controlador de pragas</b><br>Nome: ${esc(nomeControlador(x.tecnicoNome, colab(colaboradores, o.controlador)))}
+            ${x.assinaturaTecnico ? `<img src="${x.assinaturaTecnico}" class="faes-assinatura" alt="Assinatura do técnico">` : '<div class="faes-linha"></div>'}Assinatura</td>
           <td><b>Responsável técnico</b><br>Nome: ${esc(colab(colaboradores, o.responsavelTecnico))}<br>Nº Registro Conselho de Classe: ${esc(rt.registro || '')}<div class="faes-linha"></div>Assinatura</td>
           <td><b>Cliente</b><br>Nome: ${esc(x.assinaturaNome || c.nome || '')}
             <div class="faes-decl">Declaro que recebi a relação de medidas médicas preventivas antes e após o serviço, cópia da Licença Sanitária e Ambiental vigentes, e que as embalagens dos desinfetantes domissanitários utilizados foram recolhidas pela empresa prestadora do serviço.</div>

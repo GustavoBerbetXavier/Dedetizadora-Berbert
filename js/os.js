@@ -1,6 +1,6 @@
 // Página do técnico (aberta pelo link da ordem de serviço, sem login).
 // Mostra os dados da ordem e recebe a execução: produtos usados e quantidades,
-// pragas, áreas, EPI, equipamentos e a assinatura do cliente.
+// pragas, áreas, EPI, equipamentos e as assinaturas do cliente e do técnico.
 (async () => {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -127,8 +127,15 @@
         <p class="ajuda">O cliente declara que recebeu a relação de medidas preventivas, cópia das licenças sanitária e ambiental
           e que as embalagens dos produtos foram recolhidas pela empresa.</p>
         <label class="campo">Nome de quem está assinando *<input name="assinaturaNome" value="${esc(v.assinaturaNome || '')}" placeholder="Nome do cliente ou responsável"></label>
-        <div class="assinatura-caixa"><canvas id="assinatura"></canvas><span class="assinatura-dica">Assine aqui com o dedo</span></div>
-        <button type="button" class="btn sec peq" id="limpar-assinatura">Limpar assinatura</button>
+        <div class="assinatura-caixa" id="ass-cliente"><canvas></canvas><span class="assinatura-dica">Assine aqui com o dedo</span></div>
+        <button type="button" class="btn sec peq" data-limpar="ass-cliente">Limpar assinatura</button>
+      </section>
+
+      <section class="cartao">
+        <h2>6. Assinatura do técnico</h2>
+        <label class="campo">Nome do técnico / controlador de pragas *<input name="tecnicoNome" value="${esc(v.tecnicoNome || colab(o.controlador) || '')}" placeholder="Seu nome"></label>
+        <div class="assinatura-caixa" id="ass-tecnico"><canvas></canvas><span class="assinatura-dica">Técnico: assine aqui com o dedo</span></div>
+        <button type="button" class="btn sec peq" data-limpar="ass-tecnico">Limpar assinatura</button>
       </section>
 
       <div class="os-enviar"><button class="btn" id="enviar">Enviar e finalizar</button></div>
@@ -143,39 +150,55 @@
     cb.addEventListener('change', sync);
   });
 
-  // Assinatura com o dedo / mouse.
-  const canvas = $('#assinatura');
-  const ctx = canvas.getContext('2d');
-  let assinou = false, desenhando = false, ultimo = null;
-  const ajustar = () => {
-    const r = canvas.getBoundingClientRect();
-    const escala = window.devicePixelRatio || 1;
-    const copia = assinou ? canvas.toDataURL() : null;
-    canvas.width = r.width * escala; canvas.height = r.height * escala;
-    ctx.setTransform(escala, 0, 0, escala, 0, 0);
-    ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
-    if (copia) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, r.width, r.height); img.src = copia; }
-  };
-  ajustar();
-  window.addEventListener('resize', ajustar);
-  const ponto = (e) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-  canvas.addEventListener('pointerdown', (e) => { desenhando = true; ultimo = ponto(e); canvas.setPointerCapture(e.pointerId); e.preventDefault(); });
-  canvas.addEventListener('pointermove', (e) => {
-    if (!desenhando) return;
-    const p = ponto(e);
-    ctx.beginPath(); ctx.moveTo(ultimo.x, ultimo.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-    ultimo = p;
-    if (!assinou) { assinou = true; $('.assinatura-dica').hidden = true; }
-  });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => canvas.addEventListener(ev, () => (desenhando = false)));
-  $('#limpar-assinatura').addEventListener('click', () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height); assinou = false; $('.assinatura-dica').hidden = false;
-  });
+  // Quadro de assinatura com o dedo / mouse.
+  function quadroAssinatura(caixa) {
+    const canvas = $('canvas', caixa);
+    const ctx = canvas.getContext('2d');
+    const dica = $('.assinatura-dica', caixa);
+    let assinou = false, desenhando = false, ultimo = null;
+    const ajustar = () => {
+      const r = canvas.getBoundingClientRect();
+      const escala = window.devicePixelRatio || 1;
+      const copia = assinou ? canvas.toDataURL() : null;
+      canvas.width = r.width * escala; canvas.height = r.height * escala;
+      ctx.setTransform(escala, 0, 0, escala, 0, 0);
+      ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
+      if (copia) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, r.width, r.height); img.src = copia; }
+    };
+    ajustar();
+    window.addEventListener('resize', ajustar);
+    const ponto = (e) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    canvas.addEventListener('pointerdown', (e) => { desenhando = true; ultimo = ponto(e); canvas.setPointerCapture(e.pointerId); e.preventDefault(); });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!desenhando) return;
+      const p = ponto(e);
+      ctx.beginPath(); ctx.moveTo(ultimo.x, ultimo.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      ultimo = p;
+      if (!assinou) { assinou = true; dica.hidden = true; }
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => canvas.addEventListener(ev, () => (desenhando = false)));
+    return {
+      caixa,
+      assinou: () => assinou,
+      limpar() { ctx.clearRect(0, 0, canvas.width, canvas.height); assinou = false; dica.hidden = false; },
+      // PNG reduzido (fundo branco) para ficar leve
+      png() {
+        const r = canvas.getBoundingClientRect();
+        const tmp = document.createElement('canvas');
+        tmp.width = Math.min(600, Math.round(r.width)); tmp.height = Math.round(tmp.width * r.height / r.width);
+        const t = tmp.getContext('2d'); t.fillStyle = '#fff'; t.fillRect(0, 0, tmp.width, tmp.height); t.drawImage(canvas, 0, 0, tmp.width, tmp.height);
+        return tmp.toDataURL('image/png');
+      },
+    };
+  }
+  const assCliente = quadroAssinatura($('#ass-cliente'));
+  const assTecnico = quadroAssinatura($('#ass-tecnico'));
+  $$('[data-limpar]', form).forEach((b) => b.addEventListener('click', () => (b.dataset.limpar === 'ass-cliente' ? assCliente : assTecnico).limpar()));
 
   const ler = () => {
     const fd = new FormData(form);
     const dados = {};
-    ['outrasPragas', 'areaInterna', 'areaExterna', 'encontradas', 'dataExecucao', 'horaInicio', 'horaFim', 'observacoes', 'assinaturaNome',
+    ['outrasPragas', 'areaInterna', 'areaExterna', 'encontradas', 'dataExecucao', 'horaInicio', 'horaFim', 'observacoes', 'assinaturaNome', 'tecnicoNome',
       'grauInterno', 'grauExterno', 'mapeamentoIscas'].forEach((k) => { const val = fd.get(k); if (val) dados[k] = String(val).trim(); });
     ['pragas', 'equipamentos', 'epi'].forEach((k) => (dados[k] = fd.getAll(k)));
     dados.produtos = $$('.produto', form).filter((b) => $('.usa-produto', b).checked).map((b) => {
@@ -195,14 +218,12 @@
     const semQtd = dados.produtos.find((p) => !p.quantidade);
     if (semQtd) { avisar(`Digite a quantidade aplicada de ${semQtd.nome}.`, true); return; }
     if (!dados.assinaturaNome) { avisar('Digite o nome de quem está assinando.', true); form.assinaturaNome.focus(); return; }
-    if (!assinou) { avisar('Falta a assinatura do cliente.', true); canvas.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    if (!assCliente.assinou()) { avisar('Falta a assinatura do cliente.', true); assCliente.caixa.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    if (!dados.tecnicoNome) { avisar('Digite o nome do técnico.', true); form.tecnicoNome.focus(); return; }
+    if (!assTecnico.assinou()) { avisar('Falta a assinatura do técnico.', true); assTecnico.caixa.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     if (!dados.produtos.length && !confirm('Nenhum produto foi marcado. Enviar mesmo assim?')) return;
-    // assinatura em PNG reduzido (fundo branco) para ficar leve
-    const r = canvas.getBoundingClientRect();
-    const tmp = document.createElement('canvas');
-    tmp.width = Math.min(600, Math.round(r.width)); tmp.height = Math.round(tmp.width * r.height / r.width);
-    const t = tmp.getContext('2d'); t.fillStyle = '#fff'; t.fillRect(0, 0, tmp.width, tmp.height); t.drawImage(canvas, 0, 0, tmp.width, tmp.height);
-    dados.assinatura = tmp.toDataURL('image/png');
+    dados.assinatura = assCliente.png();
+    dados.assinaturaTecnico = assTecnico.png();
     dados.enviadoPor = 'link do técnico';
     if (!dados.horaFim) dados.horaFim = agora();
     const botao = $('#enviar');

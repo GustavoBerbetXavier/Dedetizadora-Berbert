@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-17.3';
+const VERSAO_APP = '2026-10-17.4';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -1979,6 +1979,8 @@ function painelExecucao(caixa, id) {
           ${x.observacoes ? `<div class="full"><span>Observações do técnico</span><b>${esc(x.observacoes)}</b></div>` : ''}
           <div class="full"><span>Assinatura do cliente${x.assinaturaNome ? ' — ' + esc(x.assinaturaNome) : ''}</span>
             ${x.assinatura ? `<img src="${x.assinatura}" class="assinatura-ver" alt="Assinatura do cliente">` : '<b>—</b>'}</div>
+          <div class="full"><span>Assinatura do técnico${x.tecnicoNome ? ' — ' + esc(x.tecnicoNome) : ''}</span>
+            ${x.assinaturaTecnico ? `<img src="${x.assinaturaTecnico}" class="assinatura-ver" alt="Assinatura do técnico">` : '<b>—</b>'}</div>
         </div>
         <div class="acoes">
           <button class="btn" id="imp-faes2">Imprimir FAES / PDF</button>
