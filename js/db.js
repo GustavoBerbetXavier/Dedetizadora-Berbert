@@ -252,7 +252,14 @@ const DB = (() => {
 
     /* ---------- Cadastros: serviços, colaboradores e produtos ---------- */
     catalogo: (tipo) => (catalogos[tipo] || []).slice(),
+    // Próximo código livre do cadastro (o maior código numérico + 1).
+    proximoCodigo(tipo, lista = catalogos[tipo] || []) {
+      return String(lista.reduce((m, x) => Math.max(m, Number(x.codigo) || 0), 0) + 1);
+    },
     async salvarCatalogo(tipo, lista) {
+      // Quem ainda não tem código recebe o próximo da sequência.
+      let prox = Number(this.proximoCodigo(tipo, lista));
+      lista = lista.map((x) => (String(x.codigo ?? '').trim() ? x : { ...x, codigo: String(prox++) }));
       const novo = { ...catalogos, [tipo]: lista };
       const { error } = await sb.from('config').upsert({ chave: 'catalogos', valor: novo });
       if (error) throw new Error(traduzirErro(error));

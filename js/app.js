@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-17.7';
+const VERSAO_APP = '2026-10-17.8';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2381,8 +2381,8 @@ const DEF_CADASTRO = {
   },
   produtos: {
     titulo: 'Produtos', singular: 'produto',
-    colunas: [['nome', 'Nome'], ['registro', 'Nº registro'], ['grupo', 'Grupo'], ['concentracao', 'Concentração'], ['antidoto', 'Antídoto e tratamento']],
-    campos: (x) => `${campo('Nome do produto *', 'nome', x.nome, 'text', 'required')}${campo('Nº registro (MS)', 'registro', x.registro)}
+    colunas: [['codigo', 'Cód.'], ['nome', 'Nome'], ['registro', 'Nº registro'], ['grupo', 'Grupo'], ['concentracao', 'Concentração'], ['antidoto', 'Antídoto e tratamento']],
+    campos: (x) => `${campo('Código', 'codigo', x.codigo)}${campo('Nome do produto *', 'nome', x.nome, 'text', 'required')}${campo('Nº registro (MS)', 'registro', x.registro)}
       ${campo('Grupo químico', 'grupo', x.grupo)}${campo('Concentração', 'concentracao', x.concentracao)}
       ${campo('Diluente', 'diluente', x.diluente, 'text', 'placeholder="Água, bloco, outros..."')}${campo('Ação tóxica', 'acao', x.acao)}
       ${campo('Antídoto e tratamento', 'antidoto', x.antidoto, 'text', 'full')}`,
@@ -2437,7 +2437,7 @@ function cadastros(el) {
 
 function formCadastro(tipo, id, aoSalvar) {
   const def = DEF_CADASTRO[tipo];
-  const x = (id && DB.catalogo(tipo).find((y) => y.id === id)) || { ativo: true };
+  const x = (id && DB.catalogo(tipo).find((y) => y.id === id)) || { ativo: true, codigo: DB.proximoCodigo(tipo) };
   abrirModal(`${id ? 'Editar' : 'Novo'} ${def.singular}`, `
     <form class="form">${def.campos(x)}
       <label class="check full"><input type="checkbox" name="ativo" ${x.ativo === false ? '' : 'checked'}> Ativo (aparece para escolher nas ordens)</label>
