@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-17.2';
+const VERSAO_APP = '2026-10-17.3';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -1563,7 +1563,7 @@ function orcamentos(el) {
         <td>${esc(o.vendedor || '')}</td>
         <td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td>
         <td><div class="acoes">
-          <button class="btn peq" data-acao="imprimir" data-id="${o.id}">Imprimir / PDF</button>
+          <button class="btn peq" data-acao="imprimir" data-id="${o.id}">Imprimir FAES</button>
           ${statusOrc(o) === 'pendente' ? `<button class="btn sec peq" data-acao="aprovar" data-id="${o.id}">${agendar ? 'Aprovar e agendar' : 'Aprovar'}</button>` : ''}
           <button class="btn sec peq" data-acao="editar" data-id="${o.id}">Editar</button>
           <button class="btn sec peq" data-acao="excluir" data-id="${o.id}">Excluir</button>
@@ -1596,7 +1596,7 @@ function orcamentos(el) {
     if (!b) return;
     e.preventDefault();
     const o = DB.obter('orcamentos', b.dataset.id);
-    if (b.dataset.acao === 'imprimir') imprimirOrcamento(o);
+    if (b.dataset.acao === 'imprimir') imprimirFAES(o);
     if (b.dataset.acao === 'editar') abrirOrcamento(o.id);
     if (b.dataset.acao === 'aprovar') {
       DB.salvarItem('orcamentos', { id: o.id, status: 'em_execucao' });
