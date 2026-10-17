@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-17.5';
+const VERSAO_APP = '2026-10-17.6';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -1690,92 +1690,148 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
     <div class="grade-mapa">
       ${CAMPOS_IMPORTACAO_ORC.map(([k, rotulo]) => `<label>${rotulo}<select data-campo="${k}">${opcoesColunas(mapa[k])}</select></label>`).join('')}
     </div>
+    <label class="check-linha"><input type="checkbox" id="op-atualizar" checked>
+      Atualizar os orçamentos que já foram importados antes, quando o arquivo trouxer alterações (cliente, emissão, valor, situação, vendedor)</label>
     <div id="previa"></div>
     <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
       <button type="button" class="btn" id="confirmar-importacao">Importar</button></div>`;
 
+  const NOMES_CAMPO = { clienteId: 'cliente', data: 'emissão', status: 'situação', vendedor: 'vendedor', valor: 'valor' };
+  const itensDe = (valor) => (valor ? [{ descricao: 'Serviço (importado do sistema anterior)', qtd: 1, valor }] : []);
   let r = null;
   const calcular = () => {
     $$('[data-campo]', el).forEach((s) => (mapa[s.dataset.campo] = s.value === '' ? undefined : Number(s.value)));
+    const atualizar = $('#op-atualizar', el).checked;
+    const opRenum = $('#op-renumerar', el);
+    const renumerar = opRenum ? opRenum.checked : false;
     const v = (linha, k) => (mapa[k] === undefined ? '' : String(linha[mapa[k]] ?? '').trim());
-    const numerosExistentes = new Set(DB.listar('orcamentos').map((o) => String(o.numero)));
+    const existentes = new Map(DB.listar('orcamentos').map((o) => [String(o.numero), o]));
     const clientes = DB.listar('clientes');
     const porCodigo = new Map(clientes.filter((c) => c.codigo).map((c) => [normalizar(c.codigo), c]));
     const porNome = new Map();
     clientes.forEach((c) => { const k = normalizar(c.nome); if (!porNome.has(k)) porNome.set(k, []); porNome.get(k).push(c); });
     const novosClientes = new Map(); // chave -> cliente a criar
-    r = { orcamentos: [], jaExistem: [], semNumero: 0, repetidosArquivo: 0, pelaCodigo: 0, peloNome: 0, divergentes: 0,
-      semCliente: 0, datasInvalidas: 0, porSituacao: {}, maior: 0, novosClientes };
+    r = { novos: [], atualizar: [], conflitos: [], iguais: 0, semNumero: 0, repetidosArquivo: 0, pelaCodigo: 0, peloNome: 0,
+      divergentes: 0, datasInvalidas: 0, porSituacao: {}, mudancas: {}, exemplosMudanca: [], maior: 0, novosClientes };
+
+    // Acha o cliente pelo código (conferindo o nome) ou pelo nome; se não existir, prepara um cadastro novo.
+    const resolverCliente = (cod, nome) => {
+      let cliente = cod ? porCodigo.get(normalizar(cod)) : null;
+      if (cliente && nome && normalizar(cliente.nome) !== normalizar(nome)) { cliente = null; r.divergentes++; } else if (cliente) r.pelaCodigo++;
+      if (!cliente && nome) {
+        const mesmos = porNome.get(normalizar(nome));
+        if (mesmos && mesmos.length === 1) { cliente = mesmos[0]; r.peloNome++; }
+      }
+      if (cliente) return { clienteId: cliente.id };
+      if (!nome && !cod) return { clienteId: '' };
+      const codLivre = cod && !porCodigo.has(normalizar(cod));
+      const chaveNovo = codLivre ? 'cod:' + normalizar(cod) : 'nome:' + normalizar(nome);
+      if (!novosClientes.has(chaveNovo)) novosClientes.set(chaveNovo, { nome: nome || `Cliente ${cod}`, tipo: 'PF', ...(codLivre ? { codigo: cod } : {}) });
+      return { clienteId: '', chaveNovo };
+    };
+
     const vistos = new Set();
     for (const linha of corpo) {
       const numero = digitos(v(linha, 'numero'));
       if (!numero) { r.semNumero++; continue; }
       if (vistos.has(numero)) { r.repetidosArquivo++; continue; }
       vistos.add(numero);
-      if (numerosExistentes.has(String(Number(numero)))) { r.jaExistem.push(Number(numero)); continue; }
-      const cod = v(linha, 'codigoCliente').replace(/\.0+$/, '');
-      const nome = v(linha, 'cliente');
-      let cliente = cod ? porCodigo.get(normalizar(cod)) : null;
-      let chaveNovo = null;
-      if (cliente && nome && normalizar(cliente.nome) !== normalizar(nome)) { cliente = null; r.divergentes++; }
-      else if (cliente) r.pelaCodigo++;
-      if (!cliente && nome) {
-        const mesmos = porNome.get(normalizar(nome));
-        if (mesmos && mesmos.length === 1) { cliente = mesmos[0]; r.peloNome++; }
-      }
-      if (!cliente && (nome || cod)) {
-        const codLivre = cod && !porCodigo.has(normalizar(cod));
-        chaveNovo = codLivre ? 'cod:' + normalizar(cod) : 'nome:' + normalizar(nome);
-        if (!novosClientes.has(chaveNovo)) {
-          novosClientes.set(chaveNovo, { nome: nome || `Cliente ${cod}`, tipo: 'PF', ...(codLivre ? { codigo: cod } : {}) });
-        }
-      }
-      if (!cliente && !chaveNovo) r.semCliente++;
+      const num = Number(numero);
+      r.maior = Math.max(r.maior, num);
       const data = dataImportada(v(linha, 'emissao'));
-      if (!data) r.datasInvalidas++;
       const valor = valorImportado(v(linha, 'valor'));
       const status = situacaoImportada(v(linha, 'situacao'));
-      r.porSituacao[status] = (r.porSituacao[status] || 0) + 1;
-      r.maior = Math.max(r.maior, Number(numero));
       const vendedor = v(linha, 'vendedor').replace(/^\d+\s+/, '').trim();
-      r.orcamentos.push({
-        numero: Number(numero), clienteId: cliente ? cliente.id : '', chaveNovo, data, validadeDias: 15, status, desconto: 0,
-        itens: valor ? [{ descricao: 'Serviço (importado do sistema anterior)', qtd: 1, valor }] : [],
+      const ex = existentes.get(String(num));
+
+      if (ex && ex.importado) {
+        // Já importado antes: só registra o que mudou.
+        if (!atualizar) { r.iguais++; continue; }
+        const cli = resolverCliente(v(linha, 'codigoCliente').replace(/\.0+$/, ''), v(linha, 'cliente'));
+        const campos = {};
+        if (cli.chaveNovo || (cli.clienteId && cli.clienteId !== ex.clienteId)) campos.clienteId = cli.clienteId;
+        if (data !== (ex.data || '')) campos.data = data;
+        if (status !== statusOrc(ex)) campos.status = status;
+        if (vendedor !== (ex.vendedor || '')) campos.vendedor = vendedor;
+        if (Math.abs(valor - totalOrcamento(ex)) > 0.004) { campos.itens = itensDe(valor); campos.desconto = 0; campos.valor = true; }
+        const mudou = Object.keys(campos).filter((k) => NOMES_CAMPO[k]);
+        if (!mudou.length) { r.iguais++; continue; }
+        mudou.forEach((k) => (r.mudancas[k] = (r.mudancas[k] || 0) + 1));
+        if (r.exemplosMudanca.length < 8) {
+          r.exemplosMudanca.push(`nº ${num}: ` + mudou.map((k) => k === 'valor' ? `valor ${moeda(totalOrcamento(ex))} → ${moeda(valor)}`
+            : k === 'data' ? `emissão ${dataBR(ex.data) || '—'} → ${dataBR(data) || '—'}`
+            : k === 'status' ? `situação → ${(STATUS_ORC.find(([s]) => s === status) || [])[1]}`
+            : k === 'clienteId' ? `cliente → ${v(linha, 'cliente')}` : `vendedor → ${vendedor}`).join(', '));
+        }
+        delete campos.valor;
+        r.atualizar.push({ id: ex.id, chaveNovo: cli.chaveNovo, ...campos });
+        continue;
+      }
+
+      const cli = resolverCliente(v(linha, 'codigoCliente').replace(/\.0+$/, ''), v(linha, 'cliente'));
+      const novo = {
+        numero: num, clienteId: cli.clienteId, chaveNovo: cli.chaveNovo, data, validadeDias: 15, status, desconto: 0, itens: itensDe(valor),
         ...(vendedor ? { vendedor } : {}), ...(v(linha, 'obs') ? { condicoes: v(linha, 'obs') } : {}), importado: true,
-      });
+      };
+      if (ex) {
+        // Número já usado por um orçamento criado no app: conflito.
+        r.conflitos.push({ ex, novo, nomeArquivo: v(linha, 'cliente') });
+        if (!renumerar) continue;
+      }
+      if (!data) r.datasInvalidas++;
+      r.porSituacao[status] = (r.porSituacao[status] || 0) + 1;
+      r.novos.push(novo);
     }
-    const n = r.orcamentos.length;
-    const amostra = r.orcamentos.slice(0, 5);
+    // Novos números para os orçamentos do app em conflito (depois do maior número existente).
+    let proximo = Math.max(r.maior, ...DB.listar('orcamentos').map((o) => Number(o.numero) || 0)) + 1;
+    r.renumerar = r.conflitos.slice().sort((a, b) => a.ex.numero - b.ex.numero).map((c) => ({ id: c.ex.id, numero: proximo++, antigo: c.ex.numero }));
+    r.maiorFinal = renumerar && r.renumerar.length ? proximo - 1 : r.maior;
+
+    const n = r.novos.length, m = r.atualizar.length;
+    const amostra = r.novos.slice(-5).reverse();
     const nomeDe = (o) => (o.clienteId ? (DB.obter('clientes', o.clienteId) || {}).nome : (novosClientes.get(o.chaveNovo) || {}).nome) || '—';
     $('#previa', el).innerHTML = `
       <div class="resumo-importacao">
-        <span class="tag verde">${n.toLocaleString('pt-BR')} orçamentos para importar</span>
-        ${r.jaExistem.length ? `<span class="tag amarelo">${r.jaExistem.length} com número que já existe no app (serão pulados)</span>` : ''}
+        <span class="tag verde">${n.toLocaleString('pt-BR')} novos para importar</span>
+        ${m ? `<span class="tag laranja">${m} já importados serão atualizados</span>` : ''}
+        ${r.iguais ? `<span class="tag cinza">${r.iguais.toLocaleString('pt-BR')} já importados sem mudanças</span>` : ''}
+        ${r.conflitos.length ? `<span class="tag vermelho">${r.conflitos.length} números em conflito com orçamentos criados no app</span>` : ''}
         ${r.repetidosArquivo ? `<span class="tag amarelo">${r.repetidosArquivo} números repetidos na planilha (pulados)</span>` : ''}
         ${r.semNumero ? `<span class="tag vermelho">${r.semNumero} sem número (pulados)</span>` : ''}
       </div>
       <ul class="lista-ajuda">
-        <li>Situação: ${STATUS_ORC.filter(([s]) => r.porSituacao[s]).map(([s, rot]) => `${rot}: <b>${r.porSituacao[s].toLocaleString('pt-BR')}</b>`).join(' · ') || '—'}</li>
-        <li>Clientes: <b>${r.pelaCodigo.toLocaleString('pt-BR')}</b> orçamentos ligados pelo código${r.peloNome ? `, <b>${r.peloNome}</b> pelo nome` : ''}${novosClientes.size ? `; <b>${novosClientes.size.toLocaleString('pt-BR')} clientes novos</b> serão cadastrados (não estavam no cadastro)` : ''}.</li>
-        ${r.divergentes ? `<li class="atencao">${r.divergentes} orçamentos têm um código de cliente que, no cadastro, pertence a outro nome. Esses foram ligados pelo nome ou a um cliente novo sem código.</li>` : ''}
-        ${r.datasInvalidas ? `<li>${r.datasInvalidas} orçamentos com data de emissão inválida ou vazia (ficarão sem data).</li>` : ''}
-        ${r.jaExistem.length ? `<li class="atencao">Números que já existem no app: ${r.jaExistem.slice(0, 15).join(', ')}${r.jaExistem.length > 15 ? '...' : ''}. Se forem orçamentos de teste, exclua-os antes e importe de novo.</li>` : ''}
-        ${r.maior ? `<li>Depois da importação, os novos orçamentos continuam a partir do nº ${(r.maior + 1).toLocaleString('pt-BR')}.</li>` : ''}
+        ${n ? `<li>Novos — situação: ${STATUS_ORC.filter(([s]) => r.porSituacao[s]).map(([s, rot]) => `${rot}: <b>${r.porSituacao[s].toLocaleString('pt-BR')}</b>`).join(' · ')}</li>` : ''}
+        ${m ? `<li>Alterações encontradas: ${Object.entries(r.mudancas).map(([k, q]) => `${NOMES_CAMPO[k]} <b>${q}</b>`).join(' · ')}
+          <ul>${r.exemplosMudanca.map((x) => `<li>${esc(x)}</li>`).join('')}${m > r.exemplosMudanca.length ? '<li>...</li>' : ''}</ul></li>` : ''}
+        ${novosClientes.size ? `<li><b>${novosClientes.size}</b> cliente(s) novo(s) serão cadastrados (não estavam no cadastro).</li>` : ''}
+        ${r.divergentes ? `<li class="atencao">${r.divergentes} linha(s) com código de cliente que, no cadastro, pertence a outro nome (ligadas pelo nome ou a um cliente novo).</li>` : ''}
+        ${r.datasInvalidas ? `<li>${r.datasInvalidas} orçamento(s) novo(s) com data de emissão inválida (ficarão sem data).</li>` : ''}
       </ul>
-      ${amostra.length ? `<b class="rotulo-previa">Prévia:</b>
+      ${r.conflitos.length ? `<div class="conflitos">
+        <b>Números em conflito:</b> estes números já são de orçamentos criados no app, mas no arquivo são de outras ordens do sistema antigo.
+        <div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>No app (criado aqui)</th><th>No arquivo (sistema antigo)</th><th>Novo nº do app</th></tr></thead><tbody>
+          ${r.conflitos.slice(0, 12).map((c) => { const rn = r.renumerar.find((x) => x.id === c.ex.id); return `<tr><td>${c.ex.numero}</td><td>${esc(nomeCliente(c.ex.clienteId))}</td><td>${esc(c.nomeArquivo)}</td><td>${rn ? rn.numero : ''}</td></tr>`; }).join('')}
+          ${r.conflitos.length > 12 ? `<tr><td colspan="4">... e mais ${r.conflitos.length - 12}</td></tr>` : ''}
+        </tbody></table></div>
+        <label class="check-linha"><input type="checkbox" id="op-renumerar" ${renumerar ? 'checked' : ''}>
+          Dar um novo número aos orçamentos criados no app (coluna "Novo nº do app") e importar as ordens do arquivo com o número original</label>
+        <p class="ajuda">Se não marcar, essas ordens do arquivo ficam de fora.</p>
+      </div>` : ''}
+      ${amostra.length ? `<b class="rotulo-previa">Últimos novos:</b>
       <div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Cliente</th><th>Vendedor</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>
         ${amostra.map((o) => `<tr><td>${o.numero}</td><td>${o.data ? dataBR(o.data) : '—'}</td><td>${esc(nomeDe(o))}</td><td>${esc(o.vendedor || '')}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td></tr>`).join('')}
       </tbody></table></div>` : ''}`;
     const botao = $('#confirmar-importacao', el);
-    botao.disabled = !n;
-    botao.textContent = `Importar ${n.toLocaleString('pt-BR')} orçamento${n === 1 ? '' : 's'}`;
+    botao.disabled = !n && !m;
+    botao.textContent = [n || !m ? `Importar ${n.toLocaleString('pt-BR')}` : '', m ? `${n ? 'e a' : 'A'}tualizar ${m}` : ''].filter(Boolean).join(' ');
   };
-  el.addEventListener('change', (e) => { if (e.target.matches('[data-campo]')) calcular(); });
+  el.addEventListener('change', (e) => { if (e.target.matches('[data-campo], #op-atualizar, #op-renumerar')) calcular(); });
   $('[data-cancelar]', el).addEventListener('click', fecharModal);
   $('#confirmar-importacao', el).addEventListener('click', async (e) => {
     if (mapa.numero === undefined) { avisar('Escolha qual coluna tem o número do orçamento.', 'erro'); return; }
     const botao = e.target;
     botao.disabled = true;
+    const renumerar = ($('#op-renumerar', el) || {}).checked && r.renumerar.length;
     try {
       const chaves = [...r.novosClientes.keys()];
       const idPorChave = new Map();
@@ -1785,14 +1841,26 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
         chaves.forEach((k, i) => idPorChave.set(k, criados[i].id));
         r.novosClientes.clear();
       }
-      const lista = r.orcamentos.map(({ chaveNovo, ...o }) => ({ ...o, clienteId: o.clienteId || idPorChave.get(chaveNovo) || '' }));
-      await DB.adicionarVarios('orcamentos', lista, (f, de) => (botao.textContent = `Importando... ${f.toLocaleString('pt-BR')} de ${de.toLocaleString('pt-BR')}`));
-      await DB.ajustarNumeracao(r.maior, 0);
+      const comCliente = ({ chaveNovo, ...o }) => ({ ...o, ...(chaveNovo ? { clienteId: idPorChave.get(chaveNovo) || '' } : {}) });
+      if (renumerar) {
+        await DB.atualizarVarios('orcamentos', r.renumerar.map(({ id, numero }) => ({ id, numero })),
+          (f, de) => (botao.textContent = `Renumerando... ${f} de ${de}`));
+      }
+      if (r.atualizar.length) {
+        await DB.atualizarVarios('orcamentos', r.atualizar.map(comCliente), (f, de) => (botao.textContent = `Atualizando... ${f} de ${de}`));
+      }
+      if (r.novos.length) {
+        await DB.adicionarVarios('orcamentos', r.novos.map(comCliente),
+          (f, de) => (botao.textContent = `Importando... ${f.toLocaleString('pt-BR')} de ${de.toLocaleString('pt-BR')}`));
+      }
+      await DB.ajustarNumeracao(renumerar ? r.maiorFinal : r.maior, 0);
       fecharModal();
-      avisar(`${lista.length.toLocaleString('pt-BR')} orçamentos importados${chaves.length ? ` e ${chaves.length} clientes cadastrados` : ''}.`);
+      avisar([r.novos.length ? `${r.novos.length.toLocaleString('pt-BR')} orçamentos importados` : '',
+        r.atualizar.length ? `${r.atualizar.length} atualizados` : '', renumerar ? `${r.renumerar.length} do app renumerados` : '',
+        chaves.length ? `${chaves.length} clientes cadastrados` : ''].filter(Boolean).join(', ') + '.');
       render();
     } catch (err) {
-      avisar('A importação parou: ' + err.message + ' O que já foi gravado foi mantido; importe de novo para continuar (números já importados são pulados).', 'erro');
+      avisar('A importação parou: ' + err.message + ' O que já foi gravado foi mantido; importe de novo para continuar.', 'erro');
       fecharModal();
       render();
     }
