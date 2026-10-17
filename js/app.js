@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-17.4';
+const VERSAO_APP = '2026-10-17.5';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -696,6 +696,7 @@ function clientes(el) {
   el.innerHTML = `
     <div class="cabecalho"><h2>Clientes</h2>
       <div class="acoes">
+      ${DB.perfil().admin ? '<button class="btn sec perigo-texto" id="excluir-tudo">Excluir tudo</button>' : ''}
       <button class="btn sec" id="importar">Importar planilha</button>
       <button class="btn" id="novo">+ Novo cliente</button></div></div>
     <div class="filtros">
@@ -770,6 +771,7 @@ function clientes(el) {
   ligarPaginacao($('#lista', el), estadoClientes, desenhar);
   $('#novo', el).addEventListener('click', () => abrirCliente('novo'));
   $('#importar', el).addEventListener('click', importarClientes);
+  if (DB.perfil().admin) $('#excluir-tudo', el).addEventListener('click', () => excluirTudo('clientes'));
   $('#lista', el).addEventListener('click', (e) => {
     const b = e.target.closest('[data-acao]');
     if (!b) return;
@@ -1520,7 +1522,7 @@ function orcamentos(el) {
   el.innerHTML = `
     <div class="cabecalho"><h2>Orçamentos e Ordens de Serviço</h2>
       <div class="acoes">
-        ${DB.perfil().admin ? '<button class="btn sec" id="importar-orc">Importar planilha</button>' : ''}
+        ${DB.perfil().admin ? '<button class="btn sec perigo-texto" id="excluir-tudo">Excluir tudo</button><button class="btn sec" id="importar-orc">Importar planilha</button>' : ''}
         <button class="btn" id="novo">+ Novo orçamento</button></div></div>
     <div class="abas" role="tablist">
       ${FILTROS_ORC.map(([v, r]) => `<button class="aba ${estadoOrc.filtro === v ? 'ativa' : ''}" data-filtro="${v}" role="tab">${r}${v === 'numero' ? '' : ` <span class="cont">${(contagem[v] || 0).toLocaleString('pt-BR')}</span>`}</button>`).join('')}
@@ -1590,7 +1592,10 @@ function orcamentos(el) {
   });
   ligarPaginacao($('#lista-orc', el), estadoOrc, desenhar);
   $('#novo', el).addEventListener('click', () => abrirOrcamento('novo'));
-  if (DB.perfil().admin) $('#importar-orc', el).addEventListener('click', importarOrcamentos);
+  if (DB.perfil().admin) {
+    $('#importar-orc', el).addEventListener('click', importarOrcamentos);
+    $('#excluir-tudo', el).addEventListener('click', () => excluirTudo('orcamentos'));
+  }
   $('#lista-orc', el).addEventListener('click', (e) => {
     const b = e.target.closest('[data-acao]');
     if (!b) return;
@@ -2512,6 +2517,43 @@ function formMinhaSenha() {
         await DB.alterarMinhaSenha(d.senha);
         fecharModal();
         avisar('Senha alterada com sucesso.');
+      });
+    });
+  });
+}
+
+/* ---------- Excluir tudo (clientes ou orçamentos), só administrador ---------- */
+function excluirTudo(col) {
+  const nomes = { clientes: ['clientes', 'cliente'], orcamentos: ['orçamentos/ordens de serviço', 'orçamento'] }[col];
+  const total = DB.listar(col).length;
+  if (!total) { avisar(`Não há ${nomes[0]} para excluir.`, 'erro'); return; }
+  const PALAVRA = 'EXCLUIR TUDO';
+  abrirModal(`Excluir todos os ${nomes[0]}`, `
+    <div class="alerta-perigo">
+      <p><b>Atenção:</b> isto apaga <b>${total.toLocaleString('pt-BR')} ${nomes[0]}</b> do banco de dados, para todos os usuários.
+        <b>Não é possível desfazer.</b></p>
+      ${col === 'clientes' ? '<p>Orçamentos, agendamentos, laudos e lançamentos ligados a esses clientes continuam no sistema, mas ficam sem o nome do cliente.</p>'
+        : '<p>A numeração dos próximos orçamentos continua de onde parou (não volta para 1).</p>'}
+    </div>
+    <p>1. Antes, baixe uma cópia de segurança: <button type="button" class="btn sec peq" id="ex-backup">Baixar backup</button></p>
+    <form class="form" id="form-ex">
+      <label class="full">2. Para confirmar, digite <b>${PALAVRA}</b><input name="confirma" autocomplete="off" placeholder="${PALAVRA}"></label>
+      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
+        <button class="btn perigo" id="ex-confirmar" disabled>Excluir ${total.toLocaleString('pt-BR')} ${nomes[0]}</button></div>
+    </form>`, (raiz) => {
+    const form = $('#form-ex', raiz);
+    const botao = $('#ex-confirmar', raiz);
+    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
+    $('#ex-backup', raiz).addEventListener('click', baixarBackup);
+    form.confirma.addEventListener('input', () => (botao.disabled = form.confirma.value.trim().toUpperCase() !== PALAVRA));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (form.confirma.value.trim().toUpperCase() !== PALAVRA) return;
+      enviando(botao, async () => {
+        await DB.removerTudo(col);
+        fecharModal();
+        avisar(`Todos os ${nomes[0]} foram excluídos.`);
+        render();
       });
     });
   });

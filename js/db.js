@@ -217,6 +217,13 @@ const DB = (() => {
       }
     },
     // Remove muitos registros de uma vez, em lotes.
+    // Apaga todos os registros de uma coleção (só funciona para quem tem permissão no banco).
+    async removerTudo(col) {
+      const { error } = await sb.from(col).delete().neq('id', '');
+      if (error) throw new Error(traduzirErro(error));
+      dados[col] = [];
+      indices[col] = new Map();
+    },
     async removerVarios(col, ids, aoProgredir) {
       for (let i = 0; i < ids.length; i += 100) {
         const lote = ids.slice(i, i + 100);

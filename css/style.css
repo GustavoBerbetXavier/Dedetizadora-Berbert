@@ -220,6 +220,8 @@ td .sub { font-size: 12px; color: var(--suave); margin-top: 2px; }
 .faes-assinatura { display: block; max-height: 60px; max-width: 100%; margin: 4px 0 2px; }
 @media print { .faes { max-width: none; } }
 
+.alerta-perigo { background: #fdecea; border: 1px solid #f3c3bd; border-radius: 8px; padding: 4px 14px; margin-bottom: 14px; color: #6d1f17; }
+
 /* Importação de planilha */
 .importacao h3 { font-size: 15px; margin: 18px 0 4px; }
 .grade-mapa { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 10px 0 14px; }
