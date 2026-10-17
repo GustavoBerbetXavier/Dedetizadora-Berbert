@@ -165,6 +165,7 @@ const ICONES = {
   funcionarios: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  cadastros: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/>',
   sino: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   conta: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
   senha: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
@@ -267,6 +268,9 @@ const ROTAS = [
   { rota: 'orcamentos', titulo: 'Orçamentos', modulo: 'orcamentos', fn: orcamentos },
   { rota: 'laudos', titulo: 'Laudos', modulo: 'laudos', fn: laudos },
   { rota: 'financeiro', titulo: 'Financeiro', modulo: 'financeiro', fn: financeiro },
+  // Página de uma ordem/orçamento: 'orcamento/<id>' (ou 'orcamento/novo').
+  { rota: 'orcamento', titulo: 'Ordem', modulo: 'orcamentos', fn: paginaOrcamento, foraDoMenu: true, menu: 'orcamentos' },
+  { rota: 'cadastros', titulo: 'Cadastros', modulo: 'admin', fn: cadastros },
   { rota: 'funcionarios', titulo: 'Funcionários', modulo: 'admin', fn: funcionarios },
   // Configurações não aparece no menu principal: fica no menu do perfil (canto inferior esquerdo).
   { rota: 'config', titulo: 'Configurações', modulo: 'admin', fn: configuracoes, foraDoMenu: true },
@@ -498,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-12.3';
+const VERSAO_APP = '2026-10-17.1';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -517,7 +521,7 @@ async function atualizarDados() {
   try {
     await DB.carregar();
     // Na página de um cliente não redesenha, para não perder o que estiver sendo digitado.
-    if (rota === rotaAtual() && $('#modal').hidden && !rota.startsWith('cliente/')) render();
+    if (rota === rotaAtual() && $('#modal').hidden && !/^(cliente|orcamento)\//.test(rota)) render();
   } catch (e) {
     avisar('Não foi possível atualizar os dados: ' + DB.traduzirErro(e), 'erro');
   }
@@ -1131,6 +1135,7 @@ function camposCliente(c) {
       ${campo('Nome fantasia', 'fantasia', c.fantasia, 'text', 'full')}
       <label>Tipo<select name="tipo">${opcoes([['PF', 'Pessoa física'], ['PJ', 'Empresa']], c.tipo)}</select></label>
       ${campo('CPF / CNPJ', 'documento', c.documento)}
+      ${campo('I.E. / R.G.', 'ie', c.ie)}
       ${campo('Telefone / WhatsApp', 'telefone', c.telefone, 'tel')}
       ${campo('E-mail', 'email', c.email, 'email')}
       ${campo('Endereço', 'endereco', c.endereco, 'text', 'full')}
@@ -1139,6 +1144,7 @@ function camposCliente(c) {
       ${campo('CEP', 'cep', c.cep)}
       ${campo('Contato responsável', 'contato', c.contato)}
       ${campo('Tipo de imóvel', 'imovel', c.imovel, 'text', 'placeholder="Casa, apartamento, restaurante..."')}
+      ${campo('Ramo de atividade', 'ramo', c.ramo, 'text', 'full placeholder="Ex.: Restaurante, indústria, contrato de julho/2025 a junho/2026..."')}
       ${campo('Observações', 'obs', c.obs, 'textarea', 'full')}`;
 }
 // Valida e grava o cliente do formulário. Devolve o cliente salvo, ou null se algo impedir.
@@ -1512,7 +1518,7 @@ function orcamentos(el) {
   const contagem = { geral: todos.length };
   todos.forEach((o) => { const st = statusOrc(o); contagem[st] = (contagem[st] || 0) + 1; });
   el.innerHTML = `
-    <div class="cabecalho"><h2>Orçamentos</h2>
+    <div class="cabecalho"><h2>Orçamentos e Ordens de Serviço</h2>
       <div class="acoes">
         ${DB.perfil().admin ? '<button class="btn sec" id="importar-orc">Importar planilha</button>' : ''}
         <button class="btn" id="novo">+ Novo orçamento</button></div></div>
@@ -1552,7 +1558,7 @@ function orcamentos(el) {
     $('#lista-orc', el).innerHTML = itens.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Cliente</th><th>Vendedor</th><th class="num">Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>
       ${itens.map((o) => {
         const c = DB.obter('clientes', o.clienteId);
-        return `<tr><td>${o.numero}</td><td>${o.data ? dataBR(o.data) : '—'}</td>
+        return `<tr><td><a href="#" class="link-cliente" data-acao="editar" data-id="${o.id}">${o.numero}</a>${o.execucao && o.execucao.enviadoEm ? ' <span class="tag verde" title="Técnico enviou a execução">assinada</span>' : ''}</td><td>${o.data ? dataBR(o.data) : '—'}</td>
         <td>${c ? `${c.codigo ? `<span class="cod-col">${esc(c.codigo)}</span> ` : ''}${esc(c.nome)}` : '—'}</td>
         <td>${esc(o.vendedor || '')}</td>
         <td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td>
@@ -1583,14 +1589,15 @@ function orcamentos(el) {
     desenhar();
   });
   ligarPaginacao($('#lista-orc', el), estadoOrc, desenhar);
-  $('#novo', el).addEventListener('click', () => formOrcamento(null));
+  $('#novo', el).addEventListener('click', () => abrirOrcamento('novo'));
   if (DB.perfil().admin) $('#importar-orc', el).addEventListener('click', importarOrcamentos);
   $('#lista-orc', el).addEventListener('click', (e) => {
     const b = e.target.closest('[data-acao]');
     if (!b) return;
+    e.preventDefault();
     const o = DB.obter('orcamentos', b.dataset.id);
     if (b.dataset.acao === 'imprimir') imprimirOrcamento(o);
-    if (b.dataset.acao === 'editar') formOrcamento(o.id);
+    if (b.dataset.acao === 'editar') abrirOrcamento(o.id);
     if (b.dataset.acao === 'aprovar') {
       DB.salvarItem('orcamentos', { id: o.id, status: 'em_execucao' });
       if (!agendar) { render(); return; }
@@ -1789,45 +1796,236 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function formOrcamento(id) {
-  const o = id ? DB.obter('orcamentos', id) : { data: hojeISO(), validadeDias: 15, status: 'pendente', itens: [{ qtd: 1 }], pagamento: 'PIX, dinheiro ou cartão' };
-  abrirModal(id ? `Editar orçamento nº ${o.numero}` : 'Novo orçamento', `
-    <form class="form">
-      ${campoCliente(o.clienteId)}
-      ${campo('Emissão', 'data', o.data, 'date', 'required')}
-      ${campo('Validade (dias)', 'validadeDias', o.validadeDias, 'number', 'min="1"')}
-      ${editorLinhas(COLS_ORC, o.itens || [])}
-      ${campo('Desconto (R$)', 'desconto', o.desconto, 'number', 'step="0.01" min="0"')}
-      <label>Situação<select name="status">${opcoes(STATUS_ORC, statusOrc(o))}</select></label>
-      ${campo('Vendedor', 'vendedor', o.vendedor, 'text', 'list="vendedores"')}
-      <datalist id="vendedores">${[...new Set(DB.listar('orcamentos').map((x) => x.vendedor).filter(Boolean))].slice(0, 50).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
-      <div class="full total-linha" id="total"></div>
-      ${campo('Forma de pagamento', 'pagamento', o.pagamento, 'text', 'full')}
-      ${campo('Garantia / condições', 'condicoes', o.condicoes, 'textarea', 'full')}
-      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
-    </form>`, (raiz) => {
-    const form = $('form', raiz);
-    ligarCampoCliente(raiz);
-    const atualizar = () => {
-      $('#total', raiz).textContent = 'Total: ' + moeda(totalOrcamento({ itens: lerLinhas(raiz, COLS_ORC), desconto: form.desconto.value }));
-    };
-    ligarLinhas(raiz, COLS_ORC, atualizar);
-    form.desconto.addEventListener('input', atualizar);
+/* ---------- Página da ordem / orçamento (abas: Dados da ordem e Execução do técnico) ---------- */
+let abaOrcamento = 'dados';
+function abrirOrcamento(id, aba = 'dados') {
+  abaOrcamento = aba;
+  irPara('orcamento/' + id);
+}
+const colaboradoresAtivos = () => DB.catalogo('colaboradores').filter((c) => c.ativo !== false)
+  .sort((a, b) => (Number(a.codigo) || 0) - (Number(b.codigo) || 0) || (a.nome || '').localeCompare(b.nome || ''));
+function opcoesColaborador(sel, funcao) {
+  const lista = colaboradoresAtivos();
+  // Mostra primeiro quem tem a função indicada; os demais continuam disponíveis.
+  const comFuncao = lista.filter((c) => (c.funcoes || []).includes(funcao));
+  const outros = lista.filter((c) => !(c.funcoes || []).includes(funcao));
+  const op = (c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc((c.codigo ? c.codigo + ' - ' : '') + c.nome)}</option>`;
+  return '<option value="">— selecione —</option>' + comFuncao.map(op).join('')
+    + (outros.length && comFuncao.length ? `<optgroup label="Outros colaboradores">${outros.map(op).join('')}</optgroup>` : outros.map(op).join(''));
+}
+function linkTecnico(o) {
+  return new URL('os.html?t=' + o.tokenTecnico, location.href.split('#')[0]).href;
+}
+
+function paginaOrcamento(el, id) {
+  const novo = id === 'novo';
+  const o = novo ? { data: hojeISO(), dataAvaliacao: hojeISO(), validadeDias: 15, status: 'pendente', itens: [], pagamento: 'PIX, dinheiro ou cartão' }
+    : DB.obter('orcamentos', id);
+  if (!o) {
+    el.innerHTML = `<div class="cartao"><p>Ordem não encontrada. Ela pode ter sido excluída.</p>
+      <button class="btn sec" id="voltar">Voltar</button></div>`;
+    $('#voltar', el).addEventListener('click', () => irPara('orcamentos'));
+    return;
+  }
+  if (novo) abaOrcamento = 'dados';
+  const servicos = DB.catalogo('servicos').filter((x) => x.ativo !== false);
+  const semColab = !colaboradoresAtivos().length;
+  el.innerHTML = `
+    <div class="pagina-topo">
+      <button class="btn sec peq" id="voltar">&lsaquo; Orçamentos</button>
+      <h2>${novo ? 'Nova ordem de serviço / orçamento' : `Nº ${o.numero} — ${esc(nomeCliente(o.clienteId))}`}</h2>
+      ${novo ? '' : tag(statusOrc(o), STATUS_ORC)}
+      ${novo ? '' : `<div class="acoes" style="margin-left:auto">
+        <button class="btn sec peq" id="imp-orc">Imprimir orçamento</button>
+        <button class="btn peq" id="imp-faes">Imprimir FAES / PDF</button></div>`}
+    </div>
+    <div class="abas" role="tablist">
+      <button class="aba ${abaOrcamento === 'dados' ? 'ativa' : ''}" data-aba="dados">Dados da ordem</button>
+      <button class="aba ${abaOrcamento === 'execucao' ? 'ativa' : ''}" data-aba="execucao" ${novo ? 'disabled title="Salve a ordem primeiro"' : ''}>Execução do técnico${o.execucao && o.execucao.enviadoEm ? ' <span class="cont">assinada</span>' : ''}</button>
+    </div>
+    <section class="cartao" data-painel="dados" ${abaOrcamento === 'dados' ? '' : 'hidden'}>
+      <form class="form" id="form-orc">
+        ${campoCliente(o.clienteId)}
+        ${campo('Emissão', 'data', o.data, 'date', 'required')}
+        <label>Situação<select name="status">${opcoes(STATUS_ORC, statusOrc(o))}</select></label>
+        <h3 class="full secao">Serviços</h3>
+        <label class="full">Adicionar serviço do cadastro
+          <select id="add-servico"><option value="">${servicos.length ? '— escolha um serviço para adicionar —' : 'Nenhum serviço cadastrado (cadastre em Cadastros → Serviços)'}</option>
+          ${servicos.map((x) => `<option value="${x.id}">${esc((x.codigo ? x.codigo + ' - ' : '') + x.descricao)} — ${moeda(x.valor)}</option>`).join('')}</select></label>
+        ${editorLinhas(COLS_ORC, o.itens || [])}
+        ${campo('Desconto (R$)', 'desconto', o.desconto, 'number', 'step="0.01" min="0"')}
+        <div class="total-linha" id="total" style="align-self:end"></div>
+        <h3 class="full secao">Responsáveis</h3>
+        ${semColab ? '<p class="full ajuda">Nenhum colaborador cadastrado. O administrador cadastra em <b>Cadastros → Colaboradores</b>.</p>' : ''}
+        <label>Responsável pelo preenchimento<select name="responsavelPreenchimento">${opcoesColaborador(o.responsavelPreenchimento, 'atendimento')}</select></label>
+        <label>Responsável pela avaliação prévia<select name="responsavelAvaliacao">${opcoesColaborador(o.responsavelAvaliacao, 'avaliador')}</select></label>
+        <label>Responsável técnico<select name="responsavelTecnico">${opcoesColaborador(o.responsavelTecnico, 'responsavel_tecnico')}</select></label>
+        <label>Técnico / controlador de pragas<select name="controlador">${opcoesColaborador(o.controlador, 'controlador')}</select></label>
+        <h3 class="full secao">Avaliação</h3>
+        ${campo('Data da avaliação', 'dataAvaliacao', o.dataAvaliacao || o.data, 'date')}
+        ${campo('Hora de início prevista', 'horaInicio', o.horaInicio, 'time')}
+        ${campo('Características das áreas', 'caracteristicas', o.caracteristicas, 'text', 'full placeholder="Ex.: 12 porta iscas, cozinha industrial, depósito..."')}
+        ${campo('Observações para o técnico', 'obsTecnico', o.obsTecnico, 'textarea', 'full')}
+        <h3 class="full secao">Orçamento</h3>
+        ${campo('Vendedor', 'vendedor', o.vendedor, 'text', 'list="vendedores"')}
+        ${campo('Validade (dias)', 'validadeDias', o.validadeDias, 'number', 'min="1"')}
+        <datalist id="vendedores">${[...new Set(DB.listar('orcamentos').map((x) => x.vendedor).filter(Boolean))].slice(0, 50).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+        ${campo('Forma de pagamento', 'pagamento', o.pagamento, 'text', 'full')}
+        ${campo('Garantia / condições', 'condicoes', o.condicoes, 'textarea', 'full')}
+        <div class="form-acoes">
+          ${novo ? '' : '<button type="button" class="btn sec perigo-texto" id="excluir-orc" style="margin-right:auto">Excluir</button>'}
+          <button type="button" class="btn sec" id="voltar2">Voltar</button>
+          <button class="btn" id="salvar-orc">${novo ? 'Criar ordem' : 'Salvar alterações'}</button>
+        </div>
+      </form>
+    </section>
+    ${novo ? '' : `<section class="cartao" data-painel="execucao" ${abaOrcamento === 'execucao' ? '' : 'hidden'}></section>`}`;
+
+  const voltar = () => irPara('orcamentos');
+  $('#voltar', el).addEventListener('click', voltar);
+  $('#voltar2', el).addEventListener('click', voltar);
+  $('.abas', el).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-aba]');
+    if (!b || b.disabled) return;
+    abaOrcamento = b.dataset.aba;
+    $$('.aba', el).forEach((x) => x.classList.toggle('ativa', x === b));
+    $$('[data-painel]', el).forEach((p) => (p.hidden = p.dataset.painel !== abaOrcamento));
+  });
+  const form = $('#form-orc', el);
+  ligarCampoCliente(form);
+  const atualizar = () => {
+    $('#total', el).textContent = 'Total: ' + moeda(totalOrcamento({ itens: lerLinhas(form, COLS_ORC), desconto: form.desconto.value }));
+  };
+  ligarLinhas(form, COLS_ORC, atualizar);
+  form.desconto.addEventListener('input', atualizar);
+  $('#add-servico', el).addEventListener('change', (e) => {
+    const sv = DB.catalogo('servicos').find((x) => x.id === e.target.value);
+    e.target.value = '';
+    if (!sv) return;
+    const tbody = $('.linhas tbody', form);
+    // reaproveita uma linha vazia, se houver
+    const vazia = $$('tr', tbody).find((tr) => !$('[data-col="descricao"]', tr).value.trim());
+    if (!vazia) tbody.insertAdjacentHTML('beforeend', linhaHTML(COLS_ORC, {}));
+    const tr = vazia || tbody.lastElementChild;
+    $('[data-col="descricao"]', tr).value = (sv.codigo ? sv.codigo + ' - ' : '') + sv.descricao;
+    $('[data-col="qtd"]', tr).value = 1;
+    $('[data-col="valor"]', tr).value = sv.valor || 0;
     atualizar();
-    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      if (!clienteValido(form)) return;
-      const dados = lerForm(form);
-      const itens = lerLinhas(raiz, COLS_ORC);
-      enviando($('#salvar', raiz), async () => {
-        const numero = id ? o.numero : await DB.proximoNumero('orcamento');
-        DB.salvarItem('orcamentos', { ...dados, itens, desconto: num(dados.desconto), id: id || undefined, numero });
-        fecharModal();
-        render();
-      });
+  });
+  atualizar();
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!clienteValido(form)) return;
+    const dados = lerForm(form);
+    const itens = lerLinhas(form, COLS_ORC);
+    enviando($('#salvar-orc', el), async () => {
+      const numero = novo ? await DB.proximoNumero('orcamento') : o.numero;
+      const salvo = DB.salvarItem('orcamentos', { ...dados, itens, desconto: num(dados.desconto), id: novo ? undefined : o.id, numero });
+      avisar(novo ? `Ordem nº ${numero} criada.` : 'Alterações salvas.');
+      if (novo) { abaOrcamento = 'execucao'; irPara('orcamento/' + salvo.id, true); }
     });
   });
+  if (novo) return;
+  $('#excluir-orc', el).addEventListener('click', () => {
+    if (!confirmar(`Excluir a ordem/orçamento nº ${o.numero}?`)) return;
+    DB.remover('orcamentos', o.id);
+    avisar('Excluído.');
+    irPara('orcamentos', true);
+  });
+  $('#imp-orc', el).addEventListener('click', () => imprimirOrcamento(DB.obter('orcamentos', o.id)));
+  $('#imp-faes', el).addEventListener('click', () => imprimirFAES(DB.obter('orcamentos', o.id)));
+  painelExecucao($('[data-painel="execucao"]', el), o.id);
+}
+
+// Aba "Execução do técnico": link para o técnico e o que ele preencheu.
+function painelExecucao(caixa, id) {
+  const desenhar = () => {
+    const o = DB.obter('orcamentos', id);
+    const x = o.execucao || {};
+    const tec = DB.catalogo('colaboradores').find((c) => c.id === o.controlador);
+    const produtos = Object.fromEntries(DB.catalogo('produtos').map((p) => [p.id, p]));
+    const nomesPragas = Object.fromEntries(FAES.PRAGAS.flatMap((g) => g.itens));
+    const lista = (chaves, tabela) => (chaves || []).map((k) => (Object.fromEntries(tabela))[k] || k).join(', ') || '—';
+    const msgWhats = `Ordem de serviço nº ${o.numero} - ${nomeCliente(o.clienteId)}\nPreencha a execução e colha a assinatura do cliente:\n`;
+    // mantém a etiqueta de situação do topo da página em dia (ex.: "Executado" após o técnico enviar)
+    const etiqueta = document.querySelector('.pagina-topo > .tag');
+    if (etiqueta) etiqueta.outerHTML = tag(statusOrc(o), STATUS_ORC);
+    const abaExec = document.querySelector('[data-aba="execucao"]');
+    if (abaExec) abaExec.innerHTML = 'Execução do técnico' + (x.enviadoEm ? ' <span class="cont">assinada</span>' : '');
+    caixa.innerHTML = `
+      <h3>Link para o técnico</h3>
+      <p class="ajuda">Envie o link ao técnico. Ele abre no celular (sem precisar de login), marca os produtos e as pragas,
+        digita as quantidades e colhe a assinatura do cliente. O que ele enviar aparece aqui.</p>
+      ${o.tokenTecnico ? `
+        <div class="link-tecnico"><input id="link" readonly value="${esc(linkTecnico(o))}">
+          <button class="btn sec" id="copiar">Copiar</button>
+          <a class="btn" id="whats" target="_blank" rel="noopener" href="https://wa.me/${tec && tec.telefone ? '55' + digitos(tec.telefone) : ''}?text=${encodeURIComponent(msgWhats + linkTecnico(o))}">Enviar por WhatsApp${tec ? ' para ' + esc(tec.nome.split(' ')[0]) : ''}</a>
+        </div>
+        <p class="ajuda"><button class="btn sec peq" id="novo-link">Gerar novo link</button> O link anterior deixa de funcionar.</p>`
+      : '<button class="btn" id="gerar-link">Gerar link para o técnico</button>'}
+      <h3 style="margin-top:22px">Execução ${x.enviadoEm ? `<span class="tag verde">Enviada em ${dataHoraBR(x.enviadoEm)}</span>` : '<span class="tag amarelo">Aguardando o técnico</span>'}
+        <button class="btn sec peq" id="atualizar-exec" style="margin-left:8px">Atualizar</button></h3>
+      ${x.enviadoEm ? `
+        <div class="conta-info">
+          <div><span>Data da execução</span><b>${dataBR(x.dataExecucao) || '—'} ${esc([x.horaInicio, x.horaFim].filter(Boolean).join(' às '))}</b></div>
+          <div><span>Áreas</span><b>Interna ${esc(x.areaInterna || '—')} m² · Externa ${esc(x.areaExterna || '—')} m²</b></div>
+          <div class="full"><span>Pragas</span><b>${(x.pragas || []).map((k) => nomesPragas[k] || k).join(', ') || '—'}${x.outrasPragas ? ' · Outras: ' + esc(x.outrasPragas) : ''}</b></div>
+          <div class="full"><span>Produtos utilizados</span><b>${(x.produtos || []).map((p) => `${esc((produtos[p.id] || p).nome)}: ${esc(p.quantidade || '—')}${p.local ? ' (' + esc(p.local) + ')' : ''}${p.lote ? ' · lote ' + esc(p.lote) : ''}`).join('<br>') || '—'}</b></div>
+          <div><span>Grau de infestação</span><b>Interna: ${esc(x.grauInterno || '—')} · Externa: ${esc(x.grauExterno || '—')}</b></div>
+          <div><span>Mapeamento de iscas</span><b>${x.mapeamentoIscas === 'sim' ? 'Sim' : x.mapeamentoIscas === 'nao' ? 'Não' : '—'}</b></div>
+          <div><span>Equipamentos</span><b>${lista(x.equipamentos, FAES.EQUIPAMENTOS)}</b></div>
+          <div><span>EPI</span><b>${lista(x.epi, FAES.EPI)}</b></div>
+          ${x.encontradas ? `<div class="full"><span>Pragas encontradas / situações que favorecem</span><b>${esc(x.encontradas)}</b></div>` : ''}
+          ${x.observacoes ? `<div class="full"><span>Observações do técnico</span><b>${esc(x.observacoes)}</b></div>` : ''}
+          <div class="full"><span>Assinatura do cliente${x.assinaturaNome ? ' — ' + esc(x.assinaturaNome) : ''}</span>
+            ${x.assinatura ? `<img src="${x.assinatura}" class="assinatura-ver" alt="Assinatura do cliente">` : '<b>—</b>'}</div>
+        </div>
+        <div class="acoes">
+          <button class="btn" id="imp-faes2">Imprimir FAES / PDF</button>
+          ${statusOrc(o) !== 'finalizado' ? '<button class="btn sec" id="finalizar">Marcar como finalizado</button>' : ''}
+          <button class="btn sec" id="liberar">Liberar para o técnico corrigir</button>
+        </div>` : '<p class="ajuda">Quando o técnico enviar, os dados e a assinatura aparecem aqui.</p>'}`;
+  };
+  caixa.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const o = DB.obter('orcamentos', id);
+    if (b.id === 'gerar-link' || b.id === 'novo-link') {
+      if (b.id === 'novo-link' && !confirmar('Gerar um novo link? O link enviado antes deixa de funcionar.')) return;
+      const bytes = new Uint8Array(24);
+      crypto.getRandomValues(bytes);
+      const token = Array.from(bytes, (v) => v.toString(16).padStart(2, '0')).join('');
+      DB.salvarItem('orcamentos', { id, tokenTecnico: token, ...(statusOrc(o) === 'pendente' ? { status: 'em_execucao' } : {}) });
+      desenhar();
+      avisar('Link gerado. Copie ou envie pelo WhatsApp.');
+    }
+    if (b.id === 'copiar') {
+      const campoLink = $('#link', caixa);
+      campoLink.select();
+      try { await navigator.clipboard.writeText(campoLink.value); } catch { document.execCommand('copy'); }
+      avisar('Link copiado.');
+    }
+    if (b.id === 'atualizar-exec') {
+      await enviando(b, async () => { await DB.carregar(); desenhar(); });
+    }
+    if (b.id === 'imp-faes2') imprimirFAES(o);
+    if (b.id === 'finalizar') { DB.salvarItem('orcamentos', { id, status: 'finalizado' }); avisar('Ordem finalizada.'); render(); }
+    if (b.id === 'liberar') {
+      if (!confirmar('Liberar para o técnico enviar de novo? Os dados atuais continuam salvos até ele reenviar.')) return;
+      DB.salvarItem('orcamentos', { id, execucao: { ...o.execucao, enviadoEm: null, liberadoEm: new Date().toISOString() } });
+      desenhar();
+      avisar('Liberado: o técnico pode abrir o mesmo link e enviar novamente.');
+    }
+  });
+  desenhar();
+}
+
+function imprimirFAES(o) {
+  const cliente = DB.obter('clientes', o.clienteId) || {};
+  const usados = new Set(((o.execucao || {}).produtos || []).map((p) => p.id));
+  // produtos ativos do cadastro + qualquer produto usado que tenha sido desativado depois
+  const produtos = DB.catalogo('produtos').filter((p) => p.ativo !== false || usados.has(p.id));
+  imprimir(FAES.documento({ ordem: o, cliente, empresa: DB.config(), colaboradores: DB.catalogo('colaboradores'), produtos }));
 }
 
 function imprimirOrcamento(o) {
@@ -2063,6 +2261,143 @@ function formFinanceiro(id, padrao = {}) {
 }
 
 /* =====================================================================
+   CADASTROS: serviços, colaboradores e produtos (somente administrador)
+   ===================================================================== */
+const FUNCOES_COLAB = [['atendimento', 'Atendimento / preenchimento'], ['avaliador', 'Avaliação prévia'],
+  ['responsavel_tecnico', 'Responsável técnico'], ['controlador', 'Técnico / controlador de pragas'], ['vendedor', 'Vendedor']];
+// Exemplos tirados da FAES em papel, usados quando os cadastros ainda estão vazios.
+const EXEMPLOS_CADASTRO = {
+  servicos: [{ codigo: '48', descricao: 'MANUTENÇÃO DEDETIZAÇÃO E DESRATIZAÇÃO', valor: 260 }],
+  colaboradores: [
+    { codigo: '2', nome: 'LUCIANO', funcoes: ['atendimento', 'avaliador', 'vendedor'] },
+    { codigo: '19', nome: 'RICARDO M. PEDROSO', funcoes: ['responsavel_tecnico'] },
+    { codigo: '27', nome: 'JUNIOR BERBET', funcoes: ['controlador'] },
+  ],
+  produtos: [
+    { nome: 'LAMBDA-CIALOTRINA', registro: '3.3308.0007', grupo: 'PIRETRINAS E PIRETRÓIDES', concentracao: '5% Lambdacialotrina', diluente: 'Água', antidoto: 'Anti-histamínicos e tratamento sintomático', acao: 'Toxicidade aguda' },
+    { nome: 'FIPRONIL', registro: '3.0404.0029', grupo: 'FENIL PIRAZOL', concentracao: '2,5% Fipronil', diluente: 'Água', antidoto: 'Tratamento sintomático', acao: 'Toxicidade aguda' },
+    { nome: 'DICLORVÓS', registro: '3.03308-0', grupo: 'ORGANOFOSFORADOS', concentracao: '76,27% Diclorvós', diluente: 'Água', antidoto: 'Atropina, oximas e tratamento', acao: 'Toxicidade aguda' },
+    { nome: 'DIFETIALONA', registro: '3.3222.0007', grupo: 'BENZOTIOPIRANONAS', concentracao: '0,005% Difenacoum', diluente: 'Bloco', antidoto: 'Vitamina K1 e tratamento sintomático', acao: 'Toxicidade aguda' },
+  ],
+};
+const DEF_CADASTRO = {
+  servicos: {
+    titulo: 'Serviços', singular: 'serviço',
+    colunas: [['codigo', 'Cód.'], ['descricao', 'Descrição'], ['valor', 'Valor', (v) => moeda(v)]],
+    campos: (x) => `${campo('Código', 'codigo', x.codigo)}${campo('Valor padrão (R$)', 'valor', x.valor, 'number', 'step="0.01" min="0"')}
+      ${campo('Descrição *', 'descricao', x.descricao, 'text', 'required full')}
+      ${campo('Detalhes (opcional)', 'detalhes', x.detalhes, 'textarea', 'full')}`,
+    ler: (d) => ({ ...d, valor: num(d.valor) }),
+  },
+  colaboradores: {
+    titulo: 'Colaboradores', singular: 'colaborador',
+    colunas: [['codigo', 'Cód.'], ['nome', 'Nome'], ['funcoes', 'Funções', (v) => (v || []).map((f) => (FUNCOES_COLAB.find(([k]) => k === f) || [f, f])[1]).join(', ')],
+      ['registro', 'Registro no conselho'], ['telefone', 'Telefone']],
+    campos: (x) => `${campo('Código', 'codigo', x.codigo)}${campo('Nome *', 'nome', x.nome, 'text', 'required')}
+      ${campo('Telefone / WhatsApp', 'telefone', x.telefone, 'tel')}${campo('Nº registro no conselho de classe', 'registro', x.registro, 'text', 'placeholder="Ex.: CRQ 123456"')}
+      <div class="full permissoes"><b>Funções na ordem de serviço</b><div class="grade-perm">
+        ${FUNCOES_COLAB.map(([k, r]) => `<label class="check"><input type="checkbox" name="f_${k}" ${(x.funcoes || []).includes(k) ? 'checked' : ''}> ${r}</label>`).join('')}</div></div>`,
+    ler: (d) => {
+      const resto = { ...d };
+      const funcoes = FUNCOES_COLAB.map(([k]) => k).filter((k) => resto['f_' + k]);
+      FUNCOES_COLAB.forEach(([k]) => delete resto['f_' + k]);
+      return { ...resto, funcoes };
+    },
+  },
+  produtos: {
+    titulo: 'Produtos', singular: 'produto',
+    colunas: [['nome', 'Nome'], ['registro', 'Nº registro'], ['grupo', 'Grupo'], ['concentracao', 'Concentração'], ['antidoto', 'Antídoto e tratamento']],
+    campos: (x) => `${campo('Nome do produto *', 'nome', x.nome, 'text', 'required')}${campo('Nº registro (MS)', 'registro', x.registro)}
+      ${campo('Grupo químico', 'grupo', x.grupo)}${campo('Concentração', 'concentracao', x.concentracao)}
+      ${campo('Diluente', 'diluente', x.diluente, 'text', 'placeholder="Água, bloco, outros..."')}${campo('Ação tóxica', 'acao', x.acao)}
+      ${campo('Antídoto e tratamento', 'antidoto', x.antidoto, 'text', 'full')}`,
+    ler: (d) => d,
+  },
+};
+let abaCadastro = 'servicos';
+
+function cadastros(el) {
+  const def = DEF_CADASTRO[abaCadastro];
+  const lista = DB.catalogo(abaCadastro);
+  el.innerHTML = `
+    <div class="cabecalho"><h2>Cadastros</h2><button class="btn" id="novo-item">+ Novo ${def.singular}</button></div>
+    <p class="ajuda">Serviços, colaboradores e produtos usados na criação das ordens de serviço.</p>
+    <div class="abas">${Object.entries(DEF_CADASTRO).map(([k, d]) => `<button class="aba ${abaCadastro === k ? 'ativa' : ''}" data-aba="${k}">${d.titulo} <span class="cont">${DB.catalogo(k).length}</span></button>`).join('')}</div>
+    <div class="cartao" style="padding:0" id="lista-cad">${lista.length ? `<div class="tabela-wrap"><table><thead><tr>${def.colunas.map(([, r]) => `<th>${r}</th>`).join('')}<th>Situação</th><th>Ações</th></tr></thead><tbody>
+    ${lista.slice().sort((a, b) => (Number(a.codigo) || 0) - (Number(b.codigo) || 0) || String(a.nome || a.descricao || '').localeCompare(String(b.nome || b.descricao || '')))
+      .map((x) => `<tr class="${x.ativo === false ? 'inativo' : ''}">${def.colunas.map(([k, , f]) => `<td>${f ? f(x[k]) : esc(x[k] || '')}</td>`).join('')}
+      <td>${x.ativo === false ? '<span class="tag cinza">Inativo</span>' : '<span class="tag verde">Ativo</span>'}</td>
+      <td><div class="acoes"><button class="btn sec peq" data-editar="${x.id}">Editar</button>
+        <button class="btn sec peq" data-ativo="${x.id}">${x.ativo === false ? 'Ativar' : 'Desativar'}</button></div></td></tr>`).join('')}
+    </tbody></table></div>`
+    : `<div class="vazio">Nenhum ${def.singular} cadastrado.
+       <p><button class="btn sec" id="exemplos">Começar com os exemplos da ficha FAES</button></p></div>`}</div>`;
+
+  $('.abas', el).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-aba]');
+    if (b) { abaCadastro = b.dataset.aba; cadastros(el); }
+  });
+  $('#novo-item', el).addEventListener('click', () => formCadastro(abaCadastro, null, () => cadastros(el)));
+  const ex = $('#exemplos', el);
+  if (ex) ex.addEventListener('click', () => enviando(ex, async () => {
+    await DB.salvarCatalogo(abaCadastro, EXEMPLOS_CADASTRO[abaCadastro].map((x) => ({ ...x, id: DB.novoId(), ativo: true })));
+    avisar('Exemplos cadastrados. Confira e ajuste o que precisar.');
+    cadastros(el);
+  }));
+  $('#lista-cad', el).addEventListener('click', async (e) => {
+    const ed = e.target.closest('[data-editar]');
+    if (ed) formCadastro(abaCadastro, ed.dataset.editar, () => cadastros(el));
+    const at = e.target.closest('[data-ativo]');
+    if (at) {
+      const nova = DB.catalogo(abaCadastro).map((x) => (x.id === at.dataset.ativo ? { ...x, ativo: x.ativo === false } : x));
+      await enviando(at, () => DB.salvarCatalogo(abaCadastro, nova));
+      cadastros(el);
+    }
+  });
+}
+
+function formCadastro(tipo, id, aoSalvar) {
+  const def = DEF_CADASTRO[tipo];
+  const x = (id && DB.catalogo(tipo).find((y) => y.id === id)) || { ativo: true };
+  abrirModal(`${id ? 'Editar' : 'Novo'} ${def.singular}`, `
+    <form class="form">${def.campos(x)}
+      <label class="check full"><input type="checkbox" name="ativo" ${x.ativo === false ? '' : 'checked'}> Ativo (aparece para escolher nas ordens)</label>
+      <div class="form-acoes">
+        ${id ? '<button type="button" class="btn sec perigo-texto" id="excluir-cad" style="margin-right:auto">Excluir</button>' : ''}
+        <button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar-cad">Salvar</button></div>
+    </form>`, (raiz) => {
+    const form = $('form', raiz);
+    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
+    if (id) {
+      $('#excluir-cad', raiz).addEventListener('click', (e) => {
+        if (!confirmar(`Excluir este ${def.singular}? Ordens antigas que o usam deixam de mostrar o nome. Se ele só não for mais usado, prefira "Desativar".`)) return;
+        enviando(e.target, async () => {
+          await DB.salvarCatalogo(tipo, DB.catalogo(tipo).filter((y) => y.id !== id));
+          fecharModal();
+          aoSalvar();
+        });
+      });
+    }
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const dados = def.ler(lerForm(form));
+      if (dados.codigo && DB.catalogo(tipo).some((y) => y.id !== id && String(y.codigo) === String(dados.codigo))) {
+        avisar(`O código ${dados.codigo} já está em uso.`, 'erro');
+        return;
+      }
+      enviando($('#salvar-cad', raiz), async () => {
+        const lista = DB.catalogo(tipo);
+        const item = { ...x, ...dados, id: id || DB.novoId() };
+        await DB.salvarCatalogo(tipo, id ? lista.map((y) => (y.id === id ? item : y)) : [...lista, item]);
+        fecharModal();
+        avisar('Salvo.');
+        aoSalvar();
+      });
+    });
+  });
+}
+
+/* =====================================================================
    FUNCIONÁRIOS (somente administrador)
    ===================================================================== */
 function tagsAcesso(p) {
@@ -2199,7 +2534,10 @@ function configuracoes(el) {
       <form class="form" id="form-cfg">
         ${campo('Nome da empresa', 'empresa', c.empresa || 'Dedetizadora Berbert', 'text', 'full')}
         ${campo('CNPJ', 'cnpj', c.cnpj)}
+        ${campo('Inscrição estadual (IE)', 'ie', c.ie)}
         ${campo('Licença sanitária / alvará', 'licenca', c.licenca)}
+        ${campo('Licença ambiental', 'licencaAmbiental', c.licencaAmbiental)}
+        ${campo('Telefone em caso de intoxicação', 'telefoneIntoxicacao', c.telefoneIntoxicacao || '0800-771-3733')}
         ${campo('Telefone', 'telefone', c.telefone)}
         ${campo('E-mail', 'email', c.email)}
         ${campo('Endereço', 'endereco', c.endereco, 'text', 'full')}

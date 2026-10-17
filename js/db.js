@@ -19,6 +19,7 @@ const DB = (() => {
   let dados = vazio();
   let indices = {}; // coleção -> Map(id -> registro), para achar um registro sem percorrer a lista
   let config = {};
+  let catalogos = { servicos: [], colaboradores: [], produtos: [] };
   let fila = Promise.resolve();
   let aoErro = (msg) => alert(msg);
   let ultimaCarga = 0;
@@ -107,11 +108,13 @@ const DB = (() => {
       }
       novos[col] = linhas.map((l) => ({ ...l.dados, id: l.id }));
     }));
-    const { data: cfg, error } = await sb.from('config').select('valor').eq('chave', 'empresa').maybeSingle();
+    const { data: cfgs, error } = await sb.from('config').select('chave, valor').in('chave', ['empresa', 'catalogos']);
     if (error) throw error;
+    const cfgPor = Object.fromEntries((cfgs || []).map((x) => [x.chave, x.valor]));
     dados = novos;
     indices = {};
-    config = (cfg && cfg.valor) || {};
+    config = cfgPor.empresa || {};
+    catalogos = { servicos: [], colaboradores: [], produtos: [], ...(cfgPor.catalogos || {}) };
     ultimaCarga = Date.now();
   }
 
@@ -142,6 +145,7 @@ const DB = (() => {
       dados = vazio();
       indices = {};
       config = {};
+      catalogos = { servicos: [], colaboradores: [], produtos: [] };
     },
     async alterarMinhaSenha(senha) {
       const { error } = await sb.auth.updateUser({ password: senha });
@@ -238,6 +242,16 @@ const DB = (() => {
       if (error) throw new Error(traduzirErro(error));
       config = novo;
     },
+
+    /* ---------- Cadastros: serviços, colaboradores e produtos ---------- */
+    catalogo: (tipo) => (catalogos[tipo] || []).slice(),
+    async salvarCatalogo(tipo, lista) {
+      const novo = { ...catalogos, [tipo]: lista };
+      const { error } = await sb.from('config').upsert({ chave: 'catalogos', valor: novo });
+      if (error) throw new Error(traduzirErro(error));
+      catalogos = novo;
+    },
+    novoId: uid,
 
     /* ---------- Funcionários (somente administrador) ---------- */
     async listarFuncionarios() {

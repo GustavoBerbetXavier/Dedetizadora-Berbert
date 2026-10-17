@@ -110,6 +110,16 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
   computador mostra a notificação "Amanhã vence: ..." uma vez por dia por conta, quando o sistema
   estiver aberto ou instalado. Em Financeiro, o filtro **Contas a pagar em aberto** lista todas as
   contas não pagas, de qualquer mês.
+- **Cadastros** (administrador): serviços (código, descrição, valor), colaboradores (código,
+  nome, funções, registro no conselho, telefone) e produtos/venenos (grupo, concentração,
+  registro, antídoto). Usados na criação das ordens.
+- **Ordem de serviço (FAES) com link para o técnico**: em Orçamentos, **+ Novo** abre a página
+  da ordem: cliente, serviços do cadastro e responsáveis (preenchimento, avaliação prévia,
+  responsável técnico, controlador de pragas). Na aba **Execução do técnico**, gere o link e envie
+  pelo WhatsApp. O técnico abre no celular, sem login, marca produtos (com quantidade), pragas,
+  áreas, EPI e equipamentos e colhe a assinatura do cliente. O resultado volta para a ordem e a
+  **FAES** pode ser impressa/salva em PDF já preenchida. **Requer rodar `supabase/ordem_link.sql`
+  uma vez no SQL Editor do Supabase.**
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em
