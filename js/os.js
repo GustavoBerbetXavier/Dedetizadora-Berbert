@@ -26,6 +26,7 @@
   try {
     const { data, error } = await sb.rpc('os_publica', { p_token: token });
     if (error) throw error;
+    if (!data) throw new Error('Link inválido ou substituído por um novo. Peça ao escritório o link atualizado.');
     info = data;
   } catch (e) {
     const m = (e && e.message) || String(e);
@@ -207,8 +208,14 @@
     const botao = $('#enviar');
     botao.disabled = true; botao.textContent = 'Enviando...';
     try {
-      const { error } = await sb.rpc('os_enviar', { p_token: token, p_execucao: dados });
+      const { data: resultado, error } = await sb.rpc('os_enviar', { p_token: token, p_execucao: dados });
       if (error) throw error;
+      if (resultado !== 'ok') {
+        throw new Error({
+          invalido: 'Este link não vale mais. Peça ao escritório o link atualizado.',
+          ja_enviado: 'Esta ordem já foi enviada. Peça ao escritório para liberar uma correção.',
+        }[resultado] || 'Não foi possível gravar (dados inválidos ou assinatura muito grande).');
+      }
       try { localStorage.removeItem(chaveRascunho); } catch { /* sem armazenamento */ }
       el.innerHTML = cabecalho + `<div class="cartao os-msg"><h2>Enviado com sucesso</h2>
         <p>A execução e a assinatura de ${esc(dados.assinaturaNome)} foram registradas no sistema.</p>
