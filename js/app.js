@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-17.8';
+const VERSAO_APP = '2026-10-18.1';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2396,7 +2396,7 @@ function cadastros(el) {
   const lista = DB.catalogo(abaCadastro);
   el.innerHTML = `
     <div class="cabecalho"><h2>Cadastros</h2><div class="acoes">
-      ${abaCadastro !== 'colaboradores' ? '<button class="btn sec" id="importar-itens">Importar planilha</button>' : ''}
+      ${abaCadastro !== 'colaboradores' ? '<button class="btn sec perigo-texto" id="excluir-tudo">Excluir tudo</button><button class="btn sec" id="importar-itens">Importar planilha</button>' : ''}
       <button class="btn" id="novo-item">+ Novo ${def.singular}</button></div></div>
     <p class="ajuda">Serviços, colaboradores e produtos usados na criação das ordens de serviço.</p>
     <div class="abas">${Object.entries(DEF_CADASTRO).map(([k, d]) => `<button class="aba ${abaCadastro === k ? 'ativa' : ''}" data-aba="${k}">${d.titulo} <span class="cont">${DB.catalogo(k).length}</span></button>`).join('')}</div>
@@ -2417,6 +2417,8 @@ function cadastros(el) {
   $('#novo-item', el).addEventListener('click', () => formCadastro(abaCadastro, null, () => cadastros(el)));
   const imp = $('#importar-itens', el);
   if (imp) imp.addEventListener('click', () => importarItensCadastro(() => cadastros(el)));
+  const exc = $('#excluir-tudo', el);
+  if (exc) exc.addEventListener('click', () => excluirTudo(abaCadastro));
   const ex = $('#exemplos', el);
   if (ex) ex.addEventListener('click', () => enviando(ex, async () => {
     await DB.salvarCatalogo(abaCadastro, EXEMPLOS_CADASTRO[abaCadastro].map((x) => ({ ...x, id: DB.novoId(), ativo: true })));
@@ -2738,8 +2740,11 @@ function formMinhaSenha() {
 
 /* ---------- Excluir tudo (clientes ou orçamentos), só administrador ---------- */
 function excluirTudo(col) {
-  const nomes = { clientes: ['clientes', 'cliente'], orcamentos: ['orçamentos/ordens de serviço', 'orçamento'] }[col];
-  const total = DB.listar(col).length;
+  // Serviços e produtos ficam nos cadastros (catálogos), não em tabelas próprias.
+  const catalogo = ['servicos', 'produtos'].includes(col);
+  const nomes = { clientes: ['clientes', 'cliente'], orcamentos: ['orçamentos/ordens de serviço', 'orçamento'],
+    servicos: ['serviços cadastrados', 'serviço'], produtos: ['produtos cadastrados', 'produto'] }[col];
+  const total = catalogo ? DB.catalogo(col).length : DB.listar(col).length;
   if (!total) { avisar(`Não há ${nomes[0]} para excluir.`, 'erro'); return; }
   const PALAVRA = 'EXCLUIR TUDO';
   abrirModal(`Excluir todos os ${nomes[0]}`, `
@@ -2747,6 +2752,7 @@ function excluirTudo(col) {
       <p><b>Atenção:</b> isto apaga <b>${total.toLocaleString('pt-BR')} ${nomes[0]}</b> do banco de dados, para todos os usuários.
         <b>Não é possível desfazer.</b></p>
       ${col === 'clientes' ? '<p>Orçamentos, agendamentos, laudos e lançamentos ligados a esses clientes continuam no sistema, mas ficam sem o nome do cliente.</p>'
+        : catalogo ? '<p>As ordens já criadas continuam com o que foi gravado nelas. Se quiser só tirar um item das próximas ordens, prefira "Desativar".</p>'
         : '<p>A numeração dos próximos orçamentos continua de onde parou (não volta para 1).</p>'}
     </div>
     <p>1. Antes, baixe uma cópia de segurança: <button type="button" class="btn sec peq" id="ex-backup">Baixar backup</button></p>
@@ -2764,7 +2770,7 @@ function excluirTudo(col) {
       e.preventDefault();
       if (form.confirma.value.trim().toUpperCase() !== PALAVRA) return;
       enviando(botao, async () => {
-        await DB.removerTudo(col);
+        if (catalogo) await DB.salvarCatalogo(col, []); else await DB.removerTudo(col);
         fecharModal();
         avisar(`Todos os ${nomes[0]} foram excluídos.`);
         render();

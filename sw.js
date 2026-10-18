@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do sistema para abrir mais rápido.
 // Os dados em si vêm sempre do banco (as requisições ao Supabase não passam pelo cache).
-const CACHE = 'berbert-v22';
+const CACHE = 'berbert-v23';
 const ARQUIVOS = [
   './', './index.html', './css/style.css', './manifest.json',
   './js/vendor/supabase.js', './js/config.js', './js/db.js', './js/faes.js', './js/app.js', './os.html', './js/os.js',

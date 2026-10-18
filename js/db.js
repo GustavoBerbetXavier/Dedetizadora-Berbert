@@ -298,7 +298,7 @@ const DB = (() => {
 
     /* ---------- Backup ---------- */
     exportar() {
-      return JSON.stringify({ ...dados, config, exportadoEm: new Date().toISOString() }, null, 2);
+      return JSON.stringify({ ...dados, config, catalogos, exportadoEm: new Date().toISOString() }, null, 2);
     },
     async importar(texto) {
       const obj = JSON.parse(texto);
@@ -314,6 +314,10 @@ const DB = (() => {
       }
       const { seqOrcamento, seqLaudo, ...empresa } = obj.config || {};
       if (Object.keys(empresa).length) await this.salvarConfig(empresa);
+      if (obj.catalogos && typeof obj.catalogos === 'object') {
+        const { error: erroCat } = await sb.from('config').upsert({ chave: 'catalogos', valor: { ...catalogos, ...obj.catalogos } });
+        if (erroCat) throw new Error(traduzirErro(erroCat));
+      }
       const maior = (col) => Math.max(0, ...(obj[col] || []).map((x) => Number(x.numero) || 0));
       const { error } = await sb.rpc('ajustar_numeracao', {
         orcamento: Math.max(Number(seqOrcamento) || 0, maior('orcamentos')),
