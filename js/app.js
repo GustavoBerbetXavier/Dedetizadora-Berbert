@@ -502,7 +502,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-18.1';
+const VERSAO_APP = '2026-10-18.2';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2016,7 +2016,6 @@ function painelExecucao(caixa, id) {
     const o = DB.obter('orcamentos', id);
     const x = o.execucao || {};
     const tec = DB.catalogo('colaboradores').find((c) => c.id === o.controlador);
-    const produtos = Object.fromEntries(DB.catalogo('produtos').map((p) => [p.id, p]));
     const nomesPragas = Object.fromEntries(FAES.PRAGAS.flatMap((g) => g.itens));
     const lista = (chaves, tabela) => (chaves || []).map((k) => (Object.fromEntries(tabela))[k] || k).join(', ') || '—';
     const msgWhats = `Ordem de serviço nº ${o.numero} - ${nomeCliente(o.clienteId)}\nPreencha a execução e colha a assinatura do cliente:\n`;
@@ -2043,7 +2042,7 @@ function painelExecucao(caixa, id) {
           <div><span>Data da execução</span><b>${dataBR(x.dataExecucao) || '—'} ${esc([x.horaInicio, x.horaFim].filter(Boolean).join(' às '))}</b></div>
           <div><span>Áreas</span><b>Interna ${esc(x.areaInterna || '—')} m² · Externa ${esc(x.areaExterna || '—')} m²</b></div>
           <div class="full"><span>Pragas</span><b>${(x.pragas || []).map((k) => nomesPragas[k] || k).join(', ') || '—'}${x.outrasPragas ? ' · Outras: ' + esc(x.outrasPragas) : ''}</b></div>
-          <div class="full"><span>Produtos utilizados</span><b>${(x.produtos || []).map((p) => `${esc((produtos[p.id] || p).nome)}: ${esc(p.quantidade || '—')}${p.local ? ' (' + esc(p.local) + ')' : ''}${p.lote ? ' · lote ' + esc(p.lote) : ''}`).join('<br>') || '—'}</b></div>
+          <div class="full"><span>Produtos utilizados</span><b>${(x.produtos || []).map((p) => `${esc((FAES.PRODUTOS.find((f) => f.id === FAES.idProduto(p)) || p).nome)}: ${esc(p.quantidade || '—')}${p.local ? ' (' + esc(p.local) + ')' : ''}${p.lote ? ' · lote ' + esc(p.lote) : ''}`).join('<br>') || '—'}</b></div>
           <div><span>Grau de infestação</span><b>Interna: ${esc(x.grauInterno || '—')} · Externa: ${esc(x.grauExterno || '—')}</b></div>
           <div><span>Mapeamento de iscas</span><b>${x.mapeamentoIscas === 'sim' ? 'Sim' : x.mapeamentoIscas === 'nao' ? 'Não' : '—'}</b></div>
           <div><span>Equipamentos</span><b>${lista(x.equipamentos, FAES.EQUIPAMENTOS)}</b></div>
@@ -2097,10 +2096,7 @@ function painelExecucao(caixa, id) {
 
 function imprimirFAES(o) {
   const cliente = DB.obter('clientes', o.clienteId) || {};
-  const usados = new Set(((o.execucao || {}).produtos || []).map((p) => p.id));
-  // produtos ativos do cadastro + qualquer produto usado que tenha sido desativado depois
-  const produtos = DB.catalogo('produtos').filter((p) => p.ativo !== false || usados.has(p.id));
-  imprimir(FAES.documento({ ordem: o, cliente, empresa: DB.config(), colaboradores: DB.catalogo('colaboradores'), produtos }));
+  imprimir(FAES.documento({ ordem: o, cliente, empresa: DB.config(), colaboradores: DB.catalogo('colaboradores') }));
 }
 
 function imprimirOrcamento(o) {
@@ -2398,7 +2394,7 @@ function cadastros(el) {
     <div class="cabecalho"><h2>Cadastros</h2><div class="acoes">
       ${abaCadastro !== 'colaboradores' ? '<button class="btn sec perigo-texto" id="excluir-tudo">Excluir tudo</button><button class="btn sec" id="importar-itens">Importar planilha</button>' : ''}
       <button class="btn" id="novo-item">+ Novo ${def.singular}</button></div></div>
-    <p class="ajuda">Serviços, colaboradores e produtos usados na criação das ordens de serviço.</p>
+    <p class="ajuda">Serviços e colaboradores usados na criação das ordens de serviço.${abaCadastro === 'produtos' ? ' Os venenos da ordem de serviço (FAES) são sempre os 4 da ficha (Lambida-Cialotrina, Fipronil, Diclovos e Difetialona); este cadastro é só para consulta.' : ''}</p>
     <div class="abas">${Object.entries(DEF_CADASTRO).map(([k, d]) => `<button class="aba ${abaCadastro === k ? 'ativa' : ''}" data-aba="${k}">${d.titulo} <span class="cont">${DB.catalogo(k).length}</span></button>`).join('')}</div>
     <div class="cartao" style="padding:0" id="lista-cad">${lista.length ? `<div class="tabela-wrap"><table><thead><tr>${def.colunas.map(([, r]) => `<th>${r}</th>`).join('')}<th>Situação</th><th>Ações</th></tr></thead><tbody>
     ${lista.slice().sort((a, b) => (Number(a.codigo) || 0) - (Number(b.codigo) || 0) || String(a.nome || a.descricao || '').localeCompare(String(b.nome || b.descricao || '')))

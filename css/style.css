@@ -372,3 +372,4 @@ td.num, th.num { text-align: right; }
 .doc .info { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 20px; }
 .itens-import { max-height: 420px; overflow: auto; margin: 8px 0 12px; }
 .itens-import select { min-width: 130px; }
+.faes-acao { text-align: center; vertical-align: middle; font-weight: bold; }

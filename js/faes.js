@@ -12,6 +12,26 @@ const FAES = (() => {
   const EQUIPAMENTOS = [['bomba_manual', 'Bomba manual'], ['atomizador', 'Atomizador elétrico'], ['bomba_motorizada', 'Bomba motorizada']];
   const EPI = [['mascara', 'Máscara'], ['roupa', 'Roupa'], ['botas', 'Botas'], ['oculos', 'Óculos'], ['protetor', 'Protetor auricular'], ['luvas', 'Luvas']];
   const GRAUS = [['baixo', 'Baixo'], ['medio', 'Médio'], ['alto', 'Alto']];
+  // Venenos da ficha: sempre estes, escritos exatamente como na FAES em papel.
+  const PRODUTOS = [
+    { id: 'lambida', nome: 'LAMBIDA - CIALOTRINA', registro: '3.3308.0007', grupo: 'PIRETRINAS E PIRETRÓIDES', concentracao: '5% Lambidacialotrina',
+      diluente: 'ÁGUA OUTROS', antidoto: 'ANTI - HISTAMÍNICOS E TRATAMENTO SINTOMÁTICO', apelidos: ['lambda', 'lambida', 'cialotrina'] },
+    { id: 'fipronil', nome: 'FIPRONIL', registro: '3.0404.0029', grupo: 'FENIL PIRAZOL', concentracao: '2,5% FIPRONIL',
+      diluente: 'ÁGUA OUTROS', antidoto: 'TRATAMENTO SINTOMÁTICO', apelidos: ['fipronil'] },
+    { id: 'diclovos', nome: 'DICLOVOS', registro: '3.03308-0', grupo: 'ORGANOFOSFORADOS', concentracao: '76,27% DICLOVOS',
+      diluente: 'ÁGUA OUTROS', antidoto: 'ATOPRINA OXIMAS E TRATAMENTO', apelidos: ['diclovos', 'diclorvos', 'ddvp'] },
+    { id: 'difetialona', nome: 'DIFETIALONA', registro: '3.3222.0007', grupo: 'BENZOTIOPIRANONAS', concentracao: '0.005% DIFENACOUM',
+      diluente: 'BLOCO', antidoto: 'VITAMINA K1 E TRATAMENTO SINTOMÁTICO', apelidos: ['difetialona', 'difenacoum'] },
+  ];
+  const ACAO_TOXICA = 'TOXIDADE AGUDA';
+  const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // Qual veneno da ficha corresponde a um produto gravado (também os de ordens antigas, gravados pelo cadastro).
+  const idProduto = (p) => {
+    if (PRODUTOS.some((f) => f.id === p.id)) return p.id;
+    const nome = semAcento(p.nome);
+    const f = nome && PRODUTOS.find((y) => y.apelidos.some((a) => nome.includes(a)));
+    return f ? f.id : p.id;
+  };
 
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dataBR = (iso) => { if (!iso) return ''; const [a, m, d] = String(iso).slice(0, 10).split('-'); return `${d}/${m}/${a}`; };
@@ -30,11 +50,12 @@ const FAES = (() => {
   };
 
   // Documento da FAES no formato da ficha em papel, preenchido com o que houver.
-  function documento({ ordem: o, cliente: c = {}, empresa: e = {}, colaboradores = [], produtos = [] }) {
+  function documento({ ordem: o, cliente: c = {}, empresa: e = {}, colaboradores = [] }) {
     const x = o.execucao || {};
     const pragas = new Set(x.pragas || []);
-    const usados = Object.fromEntries((x.produtos || []).map((p) => [p.id, p]));
-    const listaProdutos = produtos.length ? produtos : (x.produtos || []);
+    const usados = Object.fromEntries((x.produtos || []).map((p) => [idProduto(p), p]));
+    // Os 4 venenos fixos; um produto diferente usado numa ordem antiga aparece no fim.
+    const listaProdutos = [...PRODUTOS, ...(x.produtos || []).filter((p) => !PRODUTOS.some((f) => f.id === idProduto(p)))];
     const rt = (colaboradores || []).find((k) => k.id === o.responsavelTecnico) || {};
     const total = (o.itens || []).reduce((s, i) => s + (Number(i.qtd) || 1) * (Number(i.valor) || 0), 0) - (Number(o.desconto) || 0);
     return `<div class="faes">
@@ -80,11 +101,12 @@ const FAES = (() => {
         <tr><td class="faes-dir"><b>Total</b></td><td class="faes-dir"><b>${moeda(total)}</b></td></tr>
       </table>
       <table class="faes-tab faes-produtos">
-        <tr><th colspan="9">Especificações técnicas dos produtos utilizados</th></tr>
-        <tr><th></th><th>Nome / Nº registro</th><th>Grupo</th><th>Concentração</th><th>Diluente</th><th>Volume aplicado</th><th>Local de aplicação</th><th>Antídoto e tratamento</th><th>Lote / validade</th></tr>
-        ${listaProdutos.map((p) => { const u = usados[p.id] || {}; return `<tr><td>${marca(!!usados[p.id])}</td>
-          <td>${esc(p.nome)}${p.registro ? '<br>Reg. ' + esc(p.registro) : ''}</td><td>${esc(p.grupo || '')}</td><td>${esc(p.concentracao || '')}</td>
-          <td>${esc(u.diluente || p.diluente || '')}</td><td>${esc(u.quantidade || '')}</td><td>${esc(u.local || '')}</td><td>${esc(p.antidoto || '')}</td><td>${esc(u.lote || '')}</td></tr>`; }).join('')}
+        <tr><th colspan="9">ESPECIFICAÇÕES TÉCNICAS DOS PRODUTOS UTILIZADOS</th></tr>
+        <tr><th>Nome</th><th>Grupo</th><th>Concentração</th><th>Diluente</th><th>Volume aplicado</th><th>Local de Aplicação</th><th>Antídoto e tratamento</th><th>Nº de Lote e Val do Produto</th><th>Ação tóxica</th></tr>
+        ${listaProdutos.map((p, i) => { const id = idProduto(p); const u = usados[id] || {}; return `<tr>
+          <td>${marca(!!usados[id])} ${esc(p.nome)}${p.registro ? '<br>Nº Registro<br>' + esc(p.registro) : ''}</td><td>${esc(p.grupo || '')}</td><td>${esc(p.concentracao || '')}</td>
+          <td>${esc(p.diluente || u.diluente || '')}</td><td>${esc(u.quantidade || '')}</td><td>${esc(u.local || '')}</td><td>${esc(p.antidoto || '')}</td><td>${esc(u.lote || '')}</td>
+          ${i === 0 ? `<td rowspan="${listaProdutos.length}" class="faes-acao">${ACAO_TOXICA.replace(' ', '<br><br>')}</td>` : ''}</tr>`; }).join('')}
         <tr><td colspan="9"><b>Equipamentos:</b> ${EQUIPAMENTOS.map(([k, r]) => `${marca((x.equipamentos || []).includes(k))} ${r}`).join(' &nbsp; ')}</td></tr>
         <tr><td colspan="9"><b>EPI:</b> ${EPI.map(([k, r]) => `${marca((x.epi || []).includes(k))} ${r}`).join(' &nbsp; ')}</td></tr>
         <tr><td colspan="9"><b>Mapeamento de iscas:</b> SIM ${marca(x.mapeamentoIscas === 'sim')} &nbsp; NÃO ${marca(x.mapeamentoIscas === 'nao')}</td></tr>
@@ -105,5 +127,5 @@ const FAES = (() => {
     </div>`;
   }
 
-  return { PRAGAS, EQUIPAMENTOS, EPI, GRAUS, documento };
+  return { PRAGAS, EQUIPAMENTOS, EPI, GRAUS, PRODUTOS, idProduto, documento };
 })();

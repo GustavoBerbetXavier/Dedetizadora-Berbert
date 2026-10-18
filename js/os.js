@@ -43,7 +43,7 @@
   let rascunho = {};
   try { rascunho = JSON.parse(localStorage.getItem(chaveRascunho) || '{}'); } catch { /* sem armazenamento */ }
   const v = { ...x, ...rascunho };
-  const usados = Object.fromEntries((v.produtos || []).map((p) => [p.id, p]));
+  const usados = Object.fromEntries((v.produtos || []).map((p) => [FAES.idProduto(p), p]));
   const marcado = (lista, k) => (v[lista] || []).includes(k) ? 'checked' : '';
   const enderecoCompleto = [c.endereco, c.bairro, c.cidade].filter(Boolean).join(', ');
 
@@ -79,7 +79,7 @@
       <section class="cartao">
         <h2>1. Produtos (venenos) utilizados</h2>
         <p class="ajuda">Marque os produtos usados e digite a quantidade.</p>
-        ${(info.produtos || []).length ? info.produtos.map((p) => { const u = usados[p.id] || {}; return `
+        ${FAES.PRODUTOS.map((p) => { const u = usados[p.id] || {}; return `
           <div class="produto ${usados[p.id] ? 'usado' : ''}" data-produto="${esc(p.id)}">
             <label class="opcao grande"><input type="checkbox" class="usa-produto" ${usados[p.id] ? 'checked' : ''}>
               <span><b>${esc(p.nome)}</b><small>${esc([p.grupo, p.concentracao].filter(Boolean).join(' · '))}</small></span></label>
@@ -88,7 +88,7 @@
               <label>Local de aplicação<input name="local" value="${esc(u.local || '')}" placeholder="Ex.: cozinha, área externa"></label>
               <label>Lote / validade<input name="lote" value="${esc(u.lote || '')}" placeholder="Opcional"></label>
             </div>
-          </div>`; }).join('') : '<p class="ajuda">Nenhum produto cadastrado no sistema.</p>'}
+          </div>`; }).join('')}
       </section>
 
       <section class="cartao">
@@ -202,7 +202,7 @@
       'grauInterno', 'grauExterno', 'mapeamentoIscas'].forEach((k) => { const val = fd.get(k); if (val) dados[k] = String(val).trim(); });
     ['pragas', 'equipamentos', 'epi'].forEach((k) => (dados[k] = fd.getAll(k)));
     dados.produtos = $$('.produto', form).filter((b) => $('.usa-produto', b).checked).map((b) => {
-      const p = (info.produtos || []).find((y) => y.id === b.dataset.produto) || {};
+      const p = FAES.PRODUTOS.find((y) => y.id === b.dataset.produto) || {};
       return { id: b.dataset.produto, nome: p.nome, diluente: p.diluente,
         quantidade: $('[name=quantidade]', b).value.trim(), local: $('[name=local]', b).value.trim(), lote: $('[name=lote]', b).value.trim() };
     });
