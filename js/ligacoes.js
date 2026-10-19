@@ -297,6 +297,13 @@ const CATEGORIAS_PROSPECCAO = [
   ['lojas', 'Lojas em geral', ['shop']],
   ['todas', 'Todas as empresas', ['shop', 'amenity~"^(restaurant|fast_food|cafe|bar|pub|hospital|clinic|doctors|dentist|pharmacy|school|kindergarten|veterinary)$"', 'office', 'craft', 'tourism~"^(hotel|motel|guest_house)$"']],
 ];
+// O que pesquisar no Google Maps para cada tipo de empresa (palavras simples, que o Google entende como categoria).
+const TERMOS_GOOGLE = {
+  restaurantes: 'restaurantes', padarias: 'padarias', mercados: 'supermercados', bares: 'bares', saude: 'clínicas',
+  farmacias: 'farmácias', escolas: 'escolas', hoteis: 'hotéis', condominios: 'condomínios', industrias: 'indústrias',
+  agro: 'cooperativas agrícolas', pet: 'pet shops', academias: 'academias', igrejas: 'igrejas', escritorios: 'escritórios',
+  oficinas: 'oficinas mecânicas', lojas: 'lojas', todas: 'empresas',
+};
 const UFS = { AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapá', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo',
   GO: 'Goiás', MA: 'Maranhão', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso', PA: 'Pará', PB: 'Paraíba', PE: 'Pernambuco',
   PI: 'Piauí', PR: 'Paraná', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondônia', RR: 'Roraima', RS: 'Rio Grande do Sul',
@@ -419,8 +426,8 @@ function telaProspeccao(el) {
   const lista = $('#p-lista', el);
   const atualizarGoogle = () => {
     const d = lerForm(form);
-    const cat = (CATEGORIAS_PROSPECCAO.find(([k]) => k === d.categoria) || [])[1] || '';
-    $('#p-google', el).href = `https://www.google.com/maps/search/${encodeURIComponent(`${d.nome || cat.split(/,| e /)[0]} em ${d.cidade} ${d.uf}`)}`;
+    const termo = d.nome || TERMOS_GOOGLE[d.categoria] || 'empresas';
+    $('#p-google', el).href = `https://www.google.com/maps/search/${encodeURIComponent(`${termo} em ${d.cidade} ${d.uf}`)}`;
   };
   form.addEventListener('input', atualizarGoogle);
   form.addEventListener('change', atualizarGoogle);
