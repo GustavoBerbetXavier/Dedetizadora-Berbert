@@ -20,6 +20,8 @@ dados na nuvem (Supabase), com login para cada funcionário.
   (princípio ativo, grupo químico, registro MS), antídoto, recomendações, garantia
   e responsável técnico. Imprime ou salva em PDF com a logo.
 - **Financeiro**: receitas e despesas por mês, contas pagas, em aberto e vencidas.
+- **Ligações**: vencimentos (quem está para vencer, pelo último serviço ou contrato) e prospecção de
+  empresas por cidade e tipo que ainda não são clientes, com ligar, WhatsApp e registro do resultado.
 - **Configurações**: dados da empresa usados nos documentos e backup dos dados.
 
 ## Como as permissões funcionam
@@ -120,6 +122,18 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
   áreas, EPI e equipamentos e colhe a assinatura do cliente. O resultado volta para a ordem e a
   **FAES** pode ser impressa/salva em PDF já preenchida. **Requer rodar `supabase/ordem_link.sql`
   uma vez no SQL Editor do Supabase.**
+- **Ligações** (área própria, liberada em Funcionários): para quem faz as ligações.
+  - **Vencimentos**: lista os clientes cujo prazo vence no mês escolhido, calculado pelo último
+    serviço feito (não cancelado) mais o prazo de retorno (padrão 6 meses, com prazos por tipo de
+    serviço) ou pelo fim do contrato escrito no cadastro ("CONTRATO DE JULHO/2025 A JUNHO/2026").
+    Mostra o último serviço, os telefones com botão de ligar e de WhatsApp (mensagem pronta) e o
+    botão **Registrar** (agendado, retornar em tal data, não atende, sem interesse...). Também filtra
+    vencidos nos últimos 12 meses, vencidos há mais de 1 ano e retornos marcados até hoje.
+  - **Prospecção**: escolha cidade, UF e tipo de empresa e clique em **Pesquisar**. O sistema busca
+    as empresas no OpenStreetMap (gratuito) e esconde quem já é cliente (mesmo nome ou telefone) e quem
+    já recusou. Dá para ligar, mandar WhatsApp, registrar o resultado e cadastrar como cliente.
+  - Prazos e mensagens podem ser mudados em **Configurações**. **Requer rodar
+    `supabase/ligacoes.sql` uma vez no SQL Editor do Supabase.**
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em

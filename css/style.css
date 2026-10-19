@@ -373,3 +373,13 @@ td.num, th.num { text-align: right; }
 .itens-import { max-height: 420px; overflow: auto; margin: 8px 0 12px; }
 .itens-import select { min-width: 130px; }
 .faes-acao { text-align: center; vertical-align: middle; font-weight: bold; }
+.filtros-lig { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.filtros-lig label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--suave); min-width: 150px; flex: 1; }
+.filtros-lig input, .filtros-lig select { padding: 9px; border: 1px solid var(--borda); border-radius: 8px; font-size: 14px; font-family: inherit; }
+.filtros-check { margin: 0 0 10px; gap: 16px; }
+.tabela-lig td { vertical-align: top; }
+.tel-linha { display: flex; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+.tel-linha .whats { color: #1a7f37; border-color: #b9e2c5; }
+.opcoes-resultado { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.tabela-lig a[data-abrir] { color: inherit; text-decoration: none; }
+.tabela-lig a[data-abrir]:hover { text-decoration: underline; }

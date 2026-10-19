@@ -2,15 +2,18 @@
 // Os registros que o funcionário pode ver ficam em memória para as telas
 // serem rápidas; toda alteração é gravada no banco em seguida, em ordem.
 const DB = (() => {
-  const COLECOES = ['clientes', 'agendamentos', 'orcamentos', 'laudos', 'financeiro'];
+  const COLECOES = ['clientes', 'agendamentos', 'orcamentos', 'laudos', 'financeiro', 'ligacoes'];
   // Módulo exigido para ler cada coleção (clientes: qualquer funcionário ativo).
-  const MODULO = { clientes: null, agendamentos: 'agenda', orcamentos: 'orcamentos', laudos: 'laudos', financeiro: 'financeiro' };
+  const MODULO = { clientes: null, agendamentos: 'agenda', orcamentos: 'orcamentos', laudos: 'laudos', financeiro: 'financeiro', ligacoes: 'ligacoes' };
+  // Tabelas criadas depois da instalação: se ainda não existirem no banco, o app abre normalmente sem elas.
+  const OPCIONAIS = ['ligacoes'];
   const MODULOS = [
     ['clientes', 'Clientes'],
     ['agenda', 'Agenda'],
     ['orcamentos', 'Orçamentos'],
     ['laudos', 'Laudos'],
     ['financeiro', 'Financeiro'],
+    ['ligacoes', 'Ligações'],
   ];
 
   let sb = null;
@@ -23,6 +26,7 @@ const DB = (() => {
   let fila = Promise.resolve();
   let aoErro = (msg) => alert(msg);
   let ultimaCarga = 0;
+  const faltando = new Set(); // tabelas opcionais que ainda não existem no banco
 
   function vazio() {
     const base = {};
@@ -87,7 +91,9 @@ const DB = (() => {
       .order('id').range(de, de + PAGINA - 1);
     await Promise.all(COLECOES.filter(podeLer).map(async (col) => {
       const primeira = await pagina(col, 0, true);
+      if (primeira.error && OPCIONAIS.includes(col)) { faltando.add(col); return; }
       if (primeira.error) throw primeira.error;
+      faltando.delete(col);
       const linhas = [...primeira.data];
       if (primeira.data.length === PAGINA) {
         if (typeof primeira.count === 'number') {
@@ -153,6 +159,13 @@ const DB = (() => {
     },
     carregar,
     carregadoHa: () => Date.now() - ultimaCarga,
+    tabelaFaltando: (col) => faltando.has(col),
+    // Último serviço feito para cada cliente (lido no banco, para quem não tem acesso aos orçamentos).
+    async ultimosServicos() {
+      const { data, error } = await sb.rpc('ultimos_servicos');
+      if (error) throw new Error(traduzirErro(error));
+      return data || [];
+    },
 
     /* ---------- Registros ---------- */
     listar: (col) => dados[col].slice(),

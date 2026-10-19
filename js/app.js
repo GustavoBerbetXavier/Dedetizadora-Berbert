@@ -165,6 +165,7 @@ const ICONES = {
   funcionarios: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  ligacoes: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
   cadastros: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/>',
   sino: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   conta: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
@@ -268,6 +269,7 @@ const ROTAS = [
   { rota: 'orcamentos', titulo: 'Orçamentos', modulo: 'orcamentos', fn: orcamentos },
   { rota: 'laudos', titulo: 'Laudos', modulo: 'laudos', fn: laudos },
   { rota: 'financeiro', titulo: 'Financeiro', modulo: 'financeiro', fn: financeiro },
+  { rota: 'ligacoes', titulo: 'Ligações', modulo: 'ligacoes', fn: ligacoes },
   // Página de uma ordem/orçamento: 'orcamento/<id>' (ou 'orcamento/novo').
   { rota: 'orcamento', titulo: 'Ordem', modulo: 'orcamentos', fn: paginaOrcamento, foraDoMenu: true, menu: 'orcamentos' },
   { rota: 'cadastros', titulo: 'Cadastros', modulo: 'admin', fn: cadastros },
@@ -502,7 +504,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-18.2';
+const VERSAO_APP = '2026-10-19.1';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2805,6 +2807,17 @@ function configuracoes(el) {
         ${campo('Registro do responsável (CRQ/CRBio)', 'registroResp', c.registroResp)}
         <div class="form-acoes"><button class="btn" id="salvar-cfg">Salvar dados</button></div>
       </form></div>
+    <div class="cartao"><h3>Ligações (vencimentos e prospecção)</h3>
+      <form class="form" id="form-lig">
+        ${campo('Prazo de retorno padrão (meses depois do último serviço)', 'prazoRetorno', c.prazoRetorno || 6, 'number', 'min="1" max="36"')}
+        <label class="full">Prazos por tipo de serviço (uma regra por linha: palavra da descrição = meses)
+          <textarea name="regrasRetorno" rows="4">${esc(c.regrasRetorno ?? REGRAS_RETORNO)}</textarea></label>
+        <label class="full">Mensagem de WhatsApp para vencimentos ({nome}, {servico}, {data}, {vencimento}, {empresa})
+          <textarea name="msgVencimento" rows="3">${esc(c.msgVencimento || MSG_VENCIMENTO)}</textarea></label>
+        <label class="full">Mensagem de WhatsApp para prospecção ({nome}, {empresa})
+          <textarea name="msgProspeccao" rows="3">${esc(c.msgProspeccao || MSG_PROSPECCAO)}</textarea></label>
+        <div class="form-acoes"><button class="btn" id="salvar-lig">Salvar</button></div>
+      </form></div>
     <div class="cartao"><h3>Backup dos dados</h3>
       <p class="ajuda">Os dados ficam guardados no banco de dados na nuvem. Mesmo assim, é bom baixar uma cópia de vez em quando.
         A restauração também serve para importar os dados da versão anterior do sistema (que guardava no navegador).</p>
@@ -2818,6 +2831,14 @@ function configuracoes(el) {
     enviando($('#salvar-cfg', el), async () => {
       await DB.salvarConfig(dados);
       avisar('Dados da empresa salvos.');
+    });
+  });
+  $('#form-lig', el).addEventListener('submit', (e) => {
+    e.preventDefault();
+    const dados = lerForm(e.target);
+    enviando($('#salvar-lig', el), async () => {
+      await DB.salvarConfig(dados);
+      avisar('Configurações das ligações salvas.');
     });
   });
   $('#exportar', el).addEventListener('click', baixarBackup);
