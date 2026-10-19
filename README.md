@@ -132,6 +132,9 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
   - **Prospecção**: escolha cidade, UF e tipo de empresa e clique em **Pesquisar**. O sistema busca
     as empresas no OpenStreetMap (gratuito) e esconde quem já é cliente (mesmo nome ou telefone) e quem
     já recusou. Dá para ligar, mandar WhatsApp, registrar o resultado e cadastrar como cliente.
+  - **Google Maps (recomendado)**: com a chave da API do Google cadastrada em **Configurações → Ligações**,
+    a prospecção pesquisa direto no Google Maps (empresas com telefone). Na chave, ative a
+    "Places API (New)" e restrinja ao endereço do app.
   - Se o navegador ou o antivírus bloquear o servidor de mapas ("Failed to fetch"), a busca passa a ser
     feita pelo Supabase depois de rodar `supabase/prospeccao.sql` uma vez no SQL Editor.
   - Prazos e mensagens podem ser mudados em **Configurações**. **Requer rodar

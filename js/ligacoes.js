@@ -330,7 +330,13 @@ async function buscarJSON(url, opcoes, etapa, segundos = 25, sinalExterno) {
       if (ctrl.signal.aborted) throw new Error(`${etapa}: cancelado.`);
       throw new Error(`${etapa}: sem resposta do servidor (${err.message}). Verifique a internet; antivírus ou rede da empresa podem bloquear.`);
     }
-    if (!r.ok) throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}${r.status === 429 || r.status === 504 ? ' (está ocupado)' : ''}.`);
+    if (!r.ok) {
+      let detalhe = '';
+      try { const corpo = await r.json(); detalhe = (corpo.error && (corpo.error.message || corpo.error.status)) || ''; } catch { /* sem detalhe */ }
+      const conhecido = ERROS_GOOGLE.find(([re]) => re.test(detalhe));
+      if (conhecido) throw new Error(`${etapa}: ${conhecido[1]}`);
+      throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}${r.status === 429 || r.status === 504 ? ' (está ocupado)' : ''}${detalhe ? ' — ' + detalhe : ''}.`);
+    }
     try { return await r.json(); } catch { throw new Error(`${etapa}: resposta inválida ou incompleta do servidor.`); }
   } finally {
     clearTimeout(relogio);
@@ -379,7 +385,40 @@ async function consultarOverpass(consulta) {
   throw new Error(erroNavegador);
 }
 
+// Busca no Google Maps (Places API), quando o administrador cadastrou a chave em Configurações.
+const ERROS_GOOGLE = [
+  [/api key not valid|API_KEY_INVALID/i, 'a chave do Google está errada. Confira em Configurações.'],
+  [/has not been used|is disabled|SERVICE_DISABLED/i, 'a "Places API (New)" não está ativada no projeto do Google.'],
+  [/referer|referrer|API_KEY_HTTP_REFERRER_BLOCKED/i, 'a chave do Google não permite este site. Inclua o endereço do app nas restrições da chave.'],
+  [/billing/i, 'falta ativar o faturamento (cartão) no projeto do Google.'],
+  [/quota|RESOURCE_EXHAUSTED/i, 'o limite de pesquisas do Google acabou por hoje.'],
+];
+async function buscarGoogle(chave, cidade, uf, categoria, nome, progresso) {
+  const texto = `${nome || TERMOS_GOOGLE[categoria] || 'empresas'} em ${cidade} ${uf}`;
+  const campos = 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.businessStatus,nextPageToken';
+  const lugares = [];
+  let pagina = '';
+  for (let i = 0; i < 3; i++) {
+    progresso(i ? `Buscando mais empresas (${lugares.length})...` : 'Buscando no Google...');
+    const d = await buscarJSON('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': chave, 'X-Goog-FieldMask': campos },
+        body: JSON.stringify({ textQuery: texto, languageCode: 'pt-BR', regionCode: 'BR', pageSize: 20, ...(pagina ? { pageToken: pagina } : {}) }),
+      }, 'Google', 25);
+    lugares.push(...(d.places || []));
+    pagina = d.nextPageToken;
+    if (!pagina) break;
+  }
+  const alvo = normalizar(cidade);
+  const daCidade = lugares.filter((l) => normalizar(l.formattedAddress).includes(alvo));
+  return (daCidade.length ? daCidade : lugares).filter((l) => l.businessStatus !== 'CLOSED_PERMANENTLY').map((l) => ({
+    chave: 'g/' + l.id, nome: (l.displayName || {}).text || '', telefone: l.nationalPhoneNumber || '',
+    endereco: String(l.formattedAddress || '').replace(/, Brazil$|, Brasil$/, ''), cep: '', site: l.websiteUri || '', email: '',
+  })).filter((x) => x.nome);
+}
+
 async function buscarEmpresas(cidade, uf, categoria, nome, progresso = () => {}) {
+  const chave = String(DB.config().chaveGoogle || '').trim();
+  if (chave) return buscarGoogle(chave, cidade, uf, categoria, nome, progresso);
   progresso('Procurando a cidade...');
   const lugar = await acharCidade(cidade, uf);
   progresso('Buscando empresas...');
@@ -449,8 +488,10 @@ function telaProspeccao(el) {
     </div>
     <div id="p-resumo" class="resumo-importacao"></div>
     <div class="cartao" style="padding:0" id="p-lista"></div>
-    <p class="ajuda">A pesquisa usa o mapa gratuito OpenStreetMap: nem toda empresa está cadastrada lá, e algumas aparecem sem telefone.
-      Use "Ver no Google Maps" para completar a lista. Quem já é cliente (mesmo nome ou telefone do cadastro) fica escondido.</p>`;
+    <p class="ajuda">${String(DB.config().chaveGoogle || '').trim() ? 'A pesquisa usa o Google Maps.'
+      : `A pesquisa usa o mapa gratuito OpenStreetMap, que é instável e nem sempre tem as empresas ou o telefone.
+      Para pesquisar direto no Google Maps, ${DB.perfil().admin ? 'cadastre a chave do Google em Configurações → Ligações.' : 'peça ao administrador para cadastrar a chave do Google.'}`}
+      Quem já é cliente (mesmo nome ou telefone do cadastro) fica escondido.</p>`;
   const form = $('#p-form', el);
   const lista = $('#p-lista', el);
   const atualizarGoogle = () => {
