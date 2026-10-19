@@ -304,23 +304,64 @@ const UFS = { AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapá', BA: 'Bahi
 let estadoProsp = null;
 let resultadoProsp; // { titulo, cidade, uf, empresas } da última pesquisa
 
+// Servidores públicos do OpenStreetMap: se um estiver fora do ar ou ocupado, tenta o próximo.
+const SERVIDORES_OVERPASS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
+async function buscarJSON(url, opcoes, etapa) {
+  let r;
+  try { r = await fetch(url, opcoes); } catch (err) {
+    throw new Error(`${etapa}: sem resposta do servidor (${err.message}). Verifique a internet; antivírus ou rede da empresa podem bloquear.`);
+  }
+  if (!r.ok) throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}.`);
+  try { return await r.json(); } catch { throw new Error(`${etapa}: resposta inválida do servidor.`); }
+}
+// Acha a cidade no mapa: primeiro pelos campos cidade/estado, depois pelo texto livre.
+async function acharCidade(cidade, uf) {
+  const estado = UFS[uf] || uf;
+  const base = 'https://nominatim.openstreetmap.org/search?format=json&limit=10&countrycodes=br&accept-language=pt-BR';
+  const tentativas = [`${base}&city=${encodeURIComponent(cidade)}&state=${encodeURIComponent(estado)}`,
+    `${base}&q=${encodeURIComponent(`${cidade}, ${estado}, Brasil`)}`];
+  let primeiro = null;
+  for (const url of tentativas) {
+    const lugares = await buscarJSON(url, {}, 'Procurar a cidade');
+    const rel = lugares.filter((l) => l.osm_type === 'relation').sort((a, b) => (b.class === 'boundary') - (a.class === 'boundary'))[0];
+    if (rel) return rel;
+    primeiro = primeiro || lugares[0];
+  }
+  if (primeiro) return primeiro;
+  throw new Error(`Procurar a cidade: "${cidade} - ${uf}" não foi encontrada no mapa. Confira o nome (com acento) e a UF.`);
+}
+async function consultarOverpass(consulta) {
+  let ultimoErro;
+  for (const url of SERVIDORES_OVERPASS) {
+    try {
+      return await buscarJSON(url, { method: 'POST', body: 'data=' + encodeURIComponent(consulta),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }, 'Buscar as empresas');
+    } catch (err) { ultimoErro = err; }
+  }
+  throw ultimoErro;
+}
+
 async function buscarEmpresas(cidade, uf, categoria, nome) {
-  const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=10&countrycodes=br&city=${encodeURIComponent(cidade)}&state=${encodeURIComponent(UFS[uf] || uf)}`,
-    { headers: { 'Accept-Language': 'pt-BR' } });
-  if (!geo.ok) throw new Error('o serviço de mapas não respondeu (' + geo.status + ').');
-  const lugares = (await geo.json()).filter((l) => l.osm_type === 'relation')
-    .sort((a, b) => (b.class === 'boundary') - (a.class === 'boundary'));
-  if (!lugares.length) throw new Error(`cidade "${cidade} - ${uf}" não encontrada.`);
-  const area = 3600000000 + Number(lugares[0].osm_id);
+  const lugar = await acharCidade(cidade, uf);
   const cat = CATEGORIAS_PROSPECCAO.find(([k]) => k === categoria) || CATEGORIAS_PROSPECCAO[0];
   const filtroNome = nome ? `[name~"${nome.replace(/["\\]/g, '')}",i]` : '[name]';
-  const partes = cat[2].map((f) => `nwr[${f}]${filtroNome}(area.a);`).join('\n');
-  const consulta = `[out:json][timeout:60];area(${area})->.a;(\n${partes}\n);out center tags 1500;`;
-  const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(consulta),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-  if (!r.ok) throw new Error('a busca de empresas não respondeu (' + r.status + '). Tente de novo em alguns segundos.');
+  const montar = (onde) => `[out:json][timeout:90];${onde.prefixo}(\n${cat[2].map((f) => `nwr[${f}]${filtroNome}${onde.filtro};`).join('\n')}\n);out tags center 1500;`;
+  // Pela área do município; se vier vazio (área ainda não gerada no mapa), pelo retângulo da cidade.
+  let elementos = [];
+  if (lugar.osm_type === 'relation') {
+    elementos = (await consultarOverpass(montar({ prefixo: `area(${3600000000 + Number(lugar.osm_id)})->.a;`, filtro: '(area.a)' }))).elements || [];
+  }
+  if (!elementos.length && Array.isArray(lugar.boundingbox)) {
+    const [s, n, w, e] = lugar.boundingbox.map(Number);
+    elementos = (await consultarOverpass(montar({ prefixo: '', filtro: `(${s},${w},${n},${e})` }))).elements || [];
+  }
   const vistos = new Set();
-  return ((await r.json()).elements || []).map((e) => {
+  return elementos.map((e) => {
     const t = e.tags || {};
     const fones = [t.phone, t['contact:phone'], t.mobile, t['contact:mobile'], t['contact:whatsapp']].filter(Boolean).join(' / ');
     return {
@@ -400,7 +441,8 @@ function telaProspeccao(el) {
       <span class="tag cinza">${clientes} já são clientes</span>`;
     const pag = paginar(sel, e);
     guardarEstado('prospeccao', e);
-    if (!sel.length) { lista.innerHTML = '<div class="vazio">Nenhuma empresa nesta lista. Tente outro tipo de empresa ou o Google Maps.</div>'; return; }
+    if (!sel.length) { lista.innerHTML = `<div class="vazio">${todas.length ? 'Todas as empresas encontradas já são clientes ou já recusaram (veja as caixas acima).'
+      : 'O mapa gratuito não tem empresas deste tipo cadastradas nesta cidade. Tente outro tipo (ou "Todas as empresas") ou use "Ver no Google Maps".'}</div>`; return; }
     const empresa = DB.config().empresa || 'Dedetizadora Berbert';
     lista.innerHTML = `<div class="tabela-wrap"><table class="tabela-lig"><thead><tr><th>Empresa</th><th>Ligar / mensagem</th><th>Último contato</th><th></th></tr></thead><tbody>
       ${pag.itens.map((x) => `<tr data-chave="${esc(x.chave)}">
@@ -446,10 +488,12 @@ function telaProspeccao(el) {
         const cat = (CATEGORIAS_PROSPECCAO.find(([k]) => k === e.categoria) || [])[1];
         resultadoProsp = { titulo: `${cat}${e.nome ? ' com "' + e.nome + '"' : ''} em ${e.cidade} - ${e.uf}`, cidade: e.cidade, uf: e.uf, empresas };
         try { sessionStorage.setItem('berbert-prospeccao', JSON.stringify(resultadoProsp)); } catch { /* sem armazenamento */ }
+        desenhar();
       } catch (err) {
-        avisar('Não foi possível pesquisar: ' + err.message, 'erro');
+        $('#p-resumo', el).innerHTML = '';
+        lista.innerHTML = `<div class="alerta-perigo" style="margin:12px"><b>A pesquisa não funcionou.</b><br>${esc(err.message)}
+          <p class="ajuda">Tente de novo em alguns segundos. Enquanto isso, use o botão "Ver no Google Maps".</p></div>`;
       }
-      desenhar();
     });
   });
   desenhar();
