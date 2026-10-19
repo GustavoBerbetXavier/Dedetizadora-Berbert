@@ -318,13 +318,23 @@ const SERVIDORES_OVERPASS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
 ];
-async function buscarJSON(url, opcoes, etapa) {
-  let r;
-  try { r = await fetch(url, opcoes); } catch (err) {
-    throw new Error(`${etapa}: sem resposta do servidor (${err.message}). Verifique a internet; antivírus ou rede da empresa podem bloquear.`);
+// Busca com limite de tempo: um servidor que não responde não pode deixar a tela carregando para sempre.
+async function buscarJSON(url, opcoes, etapa, segundos = 25, sinalExterno) {
+  const ctrl = new AbortController();
+  const relogio = setTimeout(() => ctrl.abort('tempo'), segundos * 1000);
+  if (sinalExterno) sinalExterno.addEventListener('abort', () => ctrl.abort('cancelado'));
+  try {
+    let r;
+    try { r = await fetch(url, { ...opcoes, signal: ctrl.signal }); } catch (err) {
+      if (ctrl.signal.aborted && ctrl.signal.reason === 'tempo') throw new Error(`${etapa}: o servidor demorou mais de ${segundos} segundos para responder.`);
+      if (ctrl.signal.aborted) throw new Error(`${etapa}: cancelado.`);
+      throw new Error(`${etapa}: sem resposta do servidor (${err.message}). Verifique a internet; antivírus ou rede da empresa podem bloquear.`);
+    }
+    if (!r.ok) throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}${r.status === 429 || r.status === 504 ? ' (está ocupado)' : ''}.`);
+    try { return await r.json(); } catch { throw new Error(`${etapa}: resposta inválida ou incompleta do servidor.`); }
+  } finally {
+    clearTimeout(relogio);
   }
-  if (!r.ok) throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}.`);
-  try { return await r.json(); } catch { throw new Error(`${etapa}: resposta inválida do servidor.`); }
 }
 // Acha a cidade no mapa: primeiro pelos campos cidade/estado, depois pelo texto livre.
 async function acharCidade(cidade, uf) {
@@ -342,22 +352,29 @@ async function acharCidade(cidade, uf) {
   if (primeiro) return primeiro;
   throw new Error(`Procurar a cidade: "${cidade} - ${uf}" não foi encontrada no mapa. Confira o nome (com acento) e a UF.`);
 }
+// Pergunta a todos os servidores ao mesmo tempo e usa a primeira resposta; os outros são cancelados.
 async function consultarOverpass(consulta) {
-  let ultimoErro;
-  for (const url of SERVIDORES_OVERPASS) {
-    try {
-      return await buscarJSON(url, { method: 'POST', body: 'data=' + encodeURIComponent(consulta),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }, 'Buscar as empresas');
-    } catch (err) { ultimoErro = err; }
+  const cancelar = new AbortController();
+  const pedidos = SERVIDORES_OVERPASS.map((url) => buscarJSON(url, { method: 'POST', body: 'data=' + encodeURIComponent(consulta),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }, 'Buscar as empresas', 45, cancelar.signal)
+    .then((d) => { if (d.remark && /runtime error|timed out/i.test(d.remark) && !(d.elements || []).length) throw new Error('Buscar as empresas: o servidor não terminou a busca.'); return d; }));
+  try {
+    return await Promise.any(pedidos);
+  } catch (err) {
+    const erros = (err.errors || []).map((x) => x.message);
+    throw new Error(erros.find((m) => !m.endsWith('cancelado.')) || 'Buscar as empresas: nenhum servidor respondeu.');
+  } finally {
+    cancelar.abort();
   }
-  throw ultimoErro;
 }
 
-async function buscarEmpresas(cidade, uf, categoria, nome) {
+async function buscarEmpresas(cidade, uf, categoria, nome, progresso = () => {}) {
+  progresso('Procurando a cidade...');
   const lugar = await acharCidade(cidade, uf);
+  progresso('Buscando empresas...');
   const cat = CATEGORIAS_PROSPECCAO.find(([k]) => k === categoria) || CATEGORIAS_PROSPECCAO[0];
   const filtroNome = nome ? `[name~"${nome.replace(/["\\]/g, '')}",i]` : '[name]';
-  const montar = (onde) => `[out:json][timeout:90];${onde.prefixo}(\n${cat[2].map((f) => `nwr[${f}]${filtroNome}${onde.filtro};`).join('\n')}\n);out tags center 1500;`;
+  const montar = (onde) => `[out:json][timeout:40];${onde.prefixo}(\n${cat[2].map((f) => `nwr[${f}]${filtroNome}${onde.filtro};`).join('\n')}\n);out tags center 1500;`;
   // Pela área do município; se vier vazio (área ainda não gerada no mapa), pelo retângulo da cidade.
   let elementos = [];
   if (lugar.osm_type === 'relation') {
@@ -365,6 +382,7 @@ async function buscarEmpresas(cidade, uf, categoria, nome) {
   }
   if (!elementos.length && Array.isArray(lugar.boundingbox)) {
     const [s, n, w, e] = lugar.boundingbox.map(Number);
+    progresso('Buscando empresas na região...');
     elementos = (await consultarOverpass(montar({ prefixo: '', filtro: `(${s},${w},${n},${e})` }))).elements || [];
   }
   const vistos = new Set();
@@ -489,9 +507,13 @@ function telaProspeccao(el) {
     ev.preventDefault();
     const d = lerForm(form);
     Object.assign(e, { cidade: d.cidade.trim(), uf: d.uf, categoria: d.categoria, nome: (d.nome || '').trim(), pagina: 1 });
-    enviando($('#p-buscar', el), async () => {
+    const botao = $('#p-buscar', el);
+    if (botao.disabled) return;
+    botao.disabled = true;
+    lista.innerHTML = '<div class="vazio">Pesquisando... pode levar até 1 minuto.</div>';
+    (async () => {
       try {
-        const empresas = await buscarEmpresas(e.cidade, e.uf, e.categoria, e.nome);
+        const empresas = await buscarEmpresas(e.cidade, e.uf, e.categoria, e.nome, (msg) => { botao.textContent = msg; });
         const cat = (CATEGORIAS_PROSPECCAO.find(([k]) => k === e.categoria) || [])[1];
         resultadoProsp = { titulo: `${cat}${e.nome ? ' com "' + e.nome + '"' : ''} em ${e.cidade} - ${e.uf}`, cidade: e.cidade, uf: e.uf, empresas };
         try { sessionStorage.setItem('berbert-prospeccao', JSON.stringify(resultadoProsp)); } catch { /* sem armazenamento */ }
@@ -500,8 +522,11 @@ function telaProspeccao(el) {
         $('#p-resumo', el).innerHTML = '';
         lista.innerHTML = `<div class="alerta-perigo" style="margin:12px"><b>A pesquisa não funcionou.</b><br>${esc(err.message)}
           <p class="ajuda">Tente de novo em alguns segundos. Enquanto isso, use o botão "Ver no Google Maps".</p></div>`;
+      } finally {
+        botao.disabled = false;
+        botao.textContent = 'Pesquisar';
       }
-    });
+    })();
   });
   desenhar();
 }
