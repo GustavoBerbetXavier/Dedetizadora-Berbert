@@ -504,7 +504,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-19.6';
+const VERSAO_APP = '2026-10-19.7';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2816,9 +2816,6 @@ function configuracoes(el) {
           <textarea name="msgVencimento" rows="3">${esc(c.msgVencimento || MSG_VENCIMENTO)}</textarea></label>
         <label class="full">Mensagem de WhatsApp para prospecção ({nome}, {empresa})
           <textarea name="msgProspeccao" rows="3">${esc(c.msgProspeccao || MSG_PROSPECCAO)}</textarea></label>
-        ${campo('Chave da API do Google Maps (Places) — opcional, para a prospecção', 'chaveGoogle', c.chaveGoogle, 'text', 'full placeholder="AIza..." autocomplete="off"')}
-        <p class="ajuda full">Com a chave, a prospecção pesquisa direto no Google Maps (empresas com telefone). Crie a chave no Google Cloud,
-          ative a "Places API (New)" e restrinja a chave ao endereço deste app e à Places API.</p>
         <div class="form-acoes"><button class="btn" id="salvar-lig">Salvar</button></div>
       </form></div>
     <div class="cartao"><h3>Backup dos dados</h3>

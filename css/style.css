@@ -383,3 +383,14 @@ td.num, th.num { text-align: right; }
 .opcoes-resultado { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
 .tabela-lig a[data-abrir] { color: inherit; text-decoration: none; }
 .tabela-lig a[data-abrir]:hover { text-decoration: underline; }
+.prosp-grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 12px; align-items: start; }
+.prosp-mapa { padding: 0; overflow: hidden; }
+.prosp-mapa iframe { width: 100%; height: 560px; border: 0; display: block; }
+.prosp-conferir h3 { margin-top: 0; }
+.conf-status { font-weight: 600; padding: 10px 12px; border-radius: 8px; margin: 4px 0 10px; }
+.conf-status.cliente { background: #eceeed; color: #444; }
+.conf-status.novo { background: #dff3e8; color: var(--verde-escuro); }
+.conf-botoes { margin: 10px 0; }
+.prosp-auto summary { cursor: pointer; font-weight: 600; }
+.prosp-auto[open] summary { margin-bottom: 10px; }
+@media (max-width: 900px) { .prosp-grade { grid-template-columns: 1fr; } .prosp-mapa iframe { height: 420px; } }

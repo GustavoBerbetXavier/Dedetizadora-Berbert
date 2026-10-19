@@ -129,14 +129,11 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
     Mostra o último serviço, os telefones com botão de ligar e de WhatsApp (mensagem pronta) e o
     botão **Registrar** (agendado, retornar em tal data, não atende, sem interesse...). Também filtra
     vencidos nos últimos 12 meses, vencidos há mais de 1 ano e retornos marcados até hoje.
-  - **Prospecção**: escolha cidade, UF e tipo de empresa e clique em **Pesquisar**. O sistema busca
-    as empresas no OpenStreetMap (gratuito) e esconde quem já é cliente (mesmo nome ou telefone) e quem
-    já recusou. Dá para ligar, mandar WhatsApp, registrar o resultado e cadastrar como cliente.
-  - **Google Maps (recomendado)**: com a chave da API do Google cadastrada em **Configurações → Ligações**,
-    a prospecção pesquisa direto no Google Maps (empresas com telefone). Na chave, ative a
-    "Places API (New)" e restrinja ao endereço do app.
-  - Se o navegador ou o antivírus bloquear o servidor de mapas ("Failed to fetch"), a busca passa a ser
-    feita pelo Supabase depois de rodar `supabase/prospeccao.sql` uma vez no SQL Editor.
+  - **Prospecção**: escolha cidade, UF e tipo de empresa e clique em **Pesquisar no Google**: o mapa do
+    Google Maps aparece dentro do app (gratuito, sem chave). Ao clicar numa empresa no mapa, copie o nome ou
+    o telefone e cole em **Conferir empresa**: o sistema diz se já é cliente ou se já foi contatada, e dá os
+    botões de ligar, WhatsApp, registrar o resultado e cadastrar como cliente. Há também uma lista automática
+    pelo mapa gratuito OpenStreetMap (pode falhar ou vir incompleta).
   - Prazos e mensagens podem ser mudados em **Configurações**. **Requer rodar
     `supabase/ligacoes.sql` uma vez no SQL Editor do Supabase.**
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.

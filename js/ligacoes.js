@@ -331,11 +331,7 @@ async function buscarJSON(url, opcoes, etapa, segundos = 25, sinalExterno) {
       throw new Error(`${etapa}: sem resposta do servidor (${err.message}). Verifique a internet; antivírus ou rede da empresa podem bloquear.`);
     }
     if (!r.ok) {
-      let detalhe = '';
-      try { const corpo = await r.json(); detalhe = (corpo.error && (corpo.error.message || corpo.error.status)) || ''; } catch { /* sem detalhe */ }
-      const conhecido = ERROS_GOOGLE.find(([re]) => re.test(detalhe));
-      if (conhecido) throw new Error(`${etapa}: ${conhecido[1]}`);
-      throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}${r.status === 429 || r.status === 504 ? ' (está ocupado)' : ''}${detalhe ? ' — ' + detalhe : ''}.`);
+      throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}${r.status === 429 || r.status === 504 ? ' (está ocupado)' : ''}.`);
     }
     try { return await r.json(); } catch { throw new Error(`${etapa}: resposta inválida ou incompleta do servidor.`); }
   } finally {
@@ -385,40 +381,7 @@ async function consultarOverpass(consulta) {
   throw new Error(erroNavegador);
 }
 
-// Busca no Google Maps (Places API), quando o administrador cadastrou a chave em Configurações.
-const ERROS_GOOGLE = [
-  [/api key not valid|API_KEY_INVALID/i, 'a chave do Google está errada. Confira em Configurações.'],
-  [/has not been used|is disabled|SERVICE_DISABLED/i, 'a "Places API (New)" não está ativada no projeto do Google.'],
-  [/referer|referrer|API_KEY_HTTP_REFERRER_BLOCKED/i, 'a chave do Google não permite este site. Inclua o endereço do app nas restrições da chave.'],
-  [/billing/i, 'falta ativar o faturamento (cartão) no projeto do Google.'],
-  [/quota|RESOURCE_EXHAUSTED/i, 'o limite de pesquisas do Google acabou por hoje.'],
-];
-async function buscarGoogle(chave, cidade, uf, categoria, nome, progresso) {
-  const texto = `${nome || TERMOS_GOOGLE[categoria] || 'empresas'} em ${cidade} ${uf}`;
-  const campos = 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.businessStatus,nextPageToken';
-  const lugares = [];
-  let pagina = '';
-  for (let i = 0; i < 3; i++) {
-    progresso(i ? `Buscando mais empresas (${lugares.length})...` : 'Buscando no Google...');
-    const d = await buscarJSON('https://places.googleapis.com/v1/places:searchText', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': chave, 'X-Goog-FieldMask': campos },
-        body: JSON.stringify({ textQuery: texto, languageCode: 'pt-BR', regionCode: 'BR', pageSize: 20, ...(pagina ? { pageToken: pagina } : {}) }),
-      }, 'Google', 25);
-    lugares.push(...(d.places || []));
-    pagina = d.nextPageToken;
-    if (!pagina) break;
-  }
-  const alvo = normalizar(cidade);
-  const daCidade = lugares.filter((l) => normalizar(l.formattedAddress).includes(alvo));
-  return (daCidade.length ? daCidade : lugares).filter((l) => l.businessStatus !== 'CLOSED_PERMANENTLY').map((l) => ({
-    chave: 'g/' + l.id, nome: (l.displayName || {}).text || '', telefone: l.nationalPhoneNumber || '',
-    endereco: String(l.formattedAddress || '').replace(/, Brazil$|, Brasil$/, ''), cep: '', site: l.websiteUri || '', email: '',
-  })).filter((x) => x.nome);
-}
-
 async function buscarEmpresas(cidade, uf, categoria, nome, progresso = () => {}) {
-  const chave = String(DB.config().chaveGoogle || '').trim();
-  if (chave) return buscarGoogle(chave, cidade, uf, categoria, nome, progresso);
   progresso('Procurando a cidade...');
   const lugar = await acharCidade(cidade, uf);
   progresso('Buscando empresas...');
@@ -478,33 +441,106 @@ function telaProspeccao(el) {
       <label>UF<select name="uf">${Object.keys(UFS).map((u) => `<option ${u === e.uf ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
       <label>Tipo de empresa<select name="categoria">${CATEGORIAS_PROSPECCAO.map(([k, r]) => `<option value="${k}" ${k === e.categoria ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
       <label>Nome contém (opcional)<input name="nome" value="${esc(e.nome)}" placeholder="Ex.: pizzaria"></label>
-      <div class="acoes"><button class="btn" id="p-buscar">Pesquisar</button>
-        <a class="btn sec" id="p-google" target="_blank" rel="noopener">Ver no Google Maps</a></div>
+      <div class="acoes"><button class="btn" id="p-buscar">Pesquisar no Google</button>
+        <a class="btn sec" id="p-google" target="_blank" rel="noopener">Abrir em nova aba</a></div>
     </form>
-    <div class="acoes filtros-check">
-      <label class="check"><input type="checkbox" id="p-clientes" ${e.mostrarClientes ? 'checked' : ''}> Mostrar quem já é cliente</label>
-      <label class="check"><input type="checkbox" id="p-recusas" ${e.esconderRecusas ? 'checked' : ''}> Esconder quem já recusou</label>
-      <label class="check"><input type="checkbox" id="p-fone" ${e.soComTelefone ? 'checked' : ''}> Só com telefone</label>
+    <div class="prosp-grade">
+      <div class="cartao prosp-mapa"><iframe id="p-mapa" title="Google Maps" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>
+      <div class="cartao prosp-conferir">
+        <h3>Conferir empresa</h3>
+        <p class="ajuda">Clique numa empresa no mapa, copie o nome ou o telefone e cole aqui. O sistema diz se já é cliente.</p>
+        <form class="form" id="p-conf" autocomplete="off">
+          ${campo('Nome da empresa', 'nome', '', 'text', 'full')}
+          ${campo('Telefone', 'telefone', '', 'text', 'full inputmode="tel"')}
+        </form>
+        <div id="p-conf-res"></div>
+      </div>
     </div>
-    <div id="p-resumo" class="resumo-importacao"></div>
-    <div class="cartao" style="padding:0" id="p-lista"></div>
-    <p class="ajuda">${String(DB.config().chaveGoogle || '').trim() ? 'A pesquisa usa o Google Maps.'
-      : `A pesquisa usa o mapa gratuito OpenStreetMap, que é instável e nem sempre tem as empresas ou o telefone.
-      Para pesquisar direto no Google Maps, ${DB.perfil().admin ? 'cadastre a chave do Google em Configurações → Ligações.' : 'peça ao administrador para cadastrar a chave do Google.'}`}
-      Quem já é cliente (mesmo nome ou telefone do cadastro) fica escondido.</p>`;
+    <details class="cartao prosp-auto" ${resultadoProsp ? 'open' : ''}>
+      <summary>Lista automática pelo mapa gratuito (OpenStreetMap) — pode falhar ou vir incompleta</summary>
+      <div class="acoes filtros-check">
+        <button type="button" class="btn sec peq" id="p-auto">Buscar lista automática</button>
+        <label class="check"><input type="checkbox" id="p-clientes" ${e.mostrarClientes ? 'checked' : ''}> Mostrar quem já é cliente</label>
+        <label class="check"><input type="checkbox" id="p-recusas" ${e.esconderRecusas ? 'checked' : ''}> Esconder quem já recusou</label>
+        <label class="check"><input type="checkbox" id="p-fone" ${e.soComTelefone ? 'checked' : ''}> Só com telefone</label>
+      </div>
+      <div id="p-resumo" class="resumo-importacao"></div>
+      <div id="p-lista"></div>
+    </details>
+    <div class="cartao" style="padding:0"><h3 style="padding:12px 16px 0">Empresas anotadas na prospecção</h3><div id="p-anotadas"></div></div>`;
   const form = $('#p-form', el);
   const lista = $('#p-lista', el);
-  const atualizarGoogle = () => {
+  const termoBusca = () => {
     const d = lerForm(form);
-    const termo = d.nome || TERMOS_GOOGLE[d.categoria] || 'empresas';
-    $('#p-google', el).href = `https://www.google.com/maps/search/${encodeURIComponent(`${termo} em ${d.cidade} ${d.uf}`)}`;
+    return `${d.nome || TERMOS_GOOGLE[d.categoria] || 'empresas'} em ${d.cidade} ${d.uf}`;
   };
+  const atualizarGoogle = () => { $('#p-google', el).href = `https://www.google.com/maps/search/${encodeURIComponent(termoBusca())}`; };
+  // Mapa do Google embutido (gratuito, sem chave): mostra a mesma pesquisa do Google Maps.
+  const mostrarMapa = () => { $('#p-mapa', el).src = `https://maps.google.com/maps?q=${encodeURIComponent(termoBusca())}&hl=pt-BR&output=embed`; };
   form.addEventListener('input', atualizarGoogle);
   form.addEventListener('change', atualizarGoogle);
   atualizarGoogle();
+  mostrarMapa();
+
+  // Conferir empresa digitada/colada: já é cliente? já foi contatada?
+  const conf = $('#p-conf', el);
+  const confRes = $('#p-conf-res', el);
+  const empresaConf = () => {
+    const d = lerForm(conf);
+    const nome = (d.nome || '').trim(), telefone = (d.telefone || '').trim();
+    const fones = extrairTelefones(telefone);
+    const chave = fones.length ? 'tel/' + fones[0].numero : nome ? 'nome/' + normalizar(nome) : '';
+    return { nome, telefone, fones, chave };
+  };
+  const desenharConf = () => {
+    const x = empresaConf();
+    if (!x.nome && !x.telefone) { confRes.innerHTML = ''; return; }
+    const cliente = indiceClientes()({ nome: x.nome, telefone: x.telefone });
+    const contatos = x.chave ? contatosDe((l) => l.tipo === 'prospeccao' && (l.chave === x.chave
+      || (x.fones.length && extrairTelefones(l.telefone).some((f) => f.numero.slice(-8) === x.fones[0].numero.slice(-8))))) : [];
+    const msg = preencherMsg(DB.config().msgProspeccao || MSG_PROSPECCAO, { nome: x.nome || 'sua empresa', empresa: DB.config().empresa || 'Dedetizadora Berbert' });
+    confRes.innerHTML = `
+      ${cliente ? `<div class="conf-status cliente">Já é cliente: <a href="#" data-abrir-cli="${cliente.id}">${esc(cliente.codigo ? cliente.codigo + ' - ' : '')}${esc(cliente.nome)}</a></div>`
+        : '<div class="conf-status novo">Não é cliente</div>'}
+      ${contatos.length ? `<div class="ajuda">Já foi contatada ${contatos.length}x. Último:</div>${resumoContato(contatos[0])}` : ''}
+      <div class="conf-botoes">${x.fones.length ? botoesContato(x.fones, msg) : '<span class="ajuda">Cole o telefone para ligar ou mandar WhatsApp.</span>'}</div>
+      <div class="acoes">${x.nome || x.telefone ? '<button type="button" class="btn peq" data-conf-registrar>Registrar resultado</button>' : ''}
+        ${!cliente && x.nome && DB.pode('clientes') ? '<button type="button" class="btn sec peq" data-conf-cadastrar>Cadastrar cliente</button>' : ''}</div>`;
+  };
+  conf.addEventListener('input', desenharConf);
+  conf.addEventListener('submit', (ev) => ev.preventDefault());
+  confRes.addEventListener('click', (ev) => {
+    const x = empresaConf();
+    const ab = ev.target.closest('[data-abrir-cli]');
+    if (ab) { ev.preventDefault(); irPara('cliente/' + ab.dataset.abrirCli); return; }
+    const base = { tipo: 'prospeccao', chave: x.chave, nome: x.nome || x.telefone, telefone: x.telefone, cidade: e.cidade };
+    const depois = () => { desenharConf(); desenharAnotadas(); };
+    if (ev.target.closest('[data-conf-registrar]')) formResultado(x.nome || x.telefone, base, depois);
+    else if (ev.target.closest('[data-whats]') && !DB.tabelaFaltando('ligacoes')) { registrarLigacao(base, 'mensagem'); setTimeout(depois, 300); }
+    else if (ev.target.closest('[data-conf-cadastrar]')) {
+      if (!confirmar(`Cadastrar "${x.nome}" como cliente?`)) return;
+      const novo = DB.salvarItem('clientes', { codigo: geradorCodigos()(), nome: x.nome, tipo: 'PJ', telefone: x.telefone,
+        cidade: `${e.cidade} - ${e.uf}`.toUpperCase(), obs: 'Cadastrado pela prospecção (ligações).' });
+      avisar('Cliente cadastrado. Complete os dados na página dele.');
+      irPara('cliente/' + novo.id);
+    }
+  });
+
+  // Últimas empresas anotadas (da cidade pesquisada primeiro).
+  const anotadas = $('#p-anotadas', el);
+  const desenharAnotadas = () => {
+    const vistos = new Set();
+    const lista2 = contatosDe((l) => l.tipo === 'prospeccao').filter((l) => !vistos.has(l.chave) && vistos.add(l.chave));
+    const cidade = normalizar(e.cidade);
+    lista2.sort((a, b) => (normalizar(b.cidade) === cidade) - (normalizar(a.cidade) === cidade));
+    anotadas.innerHTML = lista2.length ? `<div class="tabela-wrap"><table class="tabela-lig"><thead><tr><th>Empresa</th><th>Cidade</th><th>Telefone</th><th>Último contato</th></tr></thead><tbody>
+      ${lista2.slice(0, 30).map((l) => `<tr><td><b>${esc(l.nome)}</b></td><td>${esc(l.cidade || '')}</td><td>${esc(l.telefone || '')}</td><td>${resumoContato(l)}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="vazio">Nenhuma empresa anotada ainda.</div>';
+  };
+  desenharAnotadas();
 
   const desenhar = () => {
-    if (!resultadoProsp) { lista.innerHTML = '<div class="vazio">Escolha a cidade e o tipo de empresa e clique em Pesquisar.</div>'; $('#p-resumo', el).innerHTML = ''; return; }
+    if (!resultadoProsp) { lista.innerHTML = ''; $('#p-resumo', el).innerHTML = ''; return; }
     const acharCliente = indiceClientes();
     const ultimos = new Map();
     contatosDe((l) => l.tipo === 'prospeccao').forEach((l) => { if (!ultimos.has(l.chave)) ultimos.set(l.chave, l); });
@@ -519,7 +555,7 @@ function telaProspeccao(el) {
     const pag = paginar(sel, e);
     guardarEstado('prospeccao', e);
     if (!sel.length) { lista.innerHTML = `<div class="vazio">${todas.length ? 'Todas as empresas encontradas já são clientes ou já recusaram (veja as caixas acima).'
-      : 'O mapa gratuito não tem empresas deste tipo cadastradas nesta cidade. Tente outro tipo (ou "Todas as empresas") ou use "Ver no Google Maps".'}</div>`; return; }
+      : 'O mapa gratuito não tem empresas deste tipo cadastradas nesta cidade. Use o mapa do Google acima.'}</div>`; return; }
     const empresa = DB.config().empresa || 'Dedetizadora Berbert';
     lista.innerHTML = `<div class="tabela-wrap"><table class="tabela-lig"><thead><tr><th>Empresa</th><th>Ligar / mensagem</th><th>Último contato</th><th></th></tr></thead><tbody>
       ${pag.itens.map((x) => `<tr data-chave="${esc(x.chave)}">
@@ -541,8 +577,9 @@ function telaProspeccao(el) {
     const x = (lista._empresas || []).find((y) => y.chave === linha.dataset.chave);
     if (!x) return;
     const base = { tipo: 'prospeccao', chave: x.chave, nome: x.nome, telefone: x.telefone, cidade: resultadoProsp.cidade };
-    if (ev.target.closest('[data-registrar]')) formResultado(x.nome, base, desenhar);
-    else if (ev.target.closest('[data-whats]') && !DB.tabelaFaltando('ligacoes')) { registrarLigacao(base, 'mensagem'); setTimeout(desenhar, 300); }
+    const depois = () => { desenhar(); desenharAnotadas(); };
+    if (ev.target.closest('[data-registrar]')) formResultado(x.nome, base, depois);
+    else if (ev.target.closest('[data-whats]') && !DB.tabelaFaltando('ligacoes')) { registrarLigacao(base, 'mensagem'); setTimeout(depois, 300); }
     else if (ev.target.closest('[data-cadastrar]')) {
       if (!confirmar(`Cadastrar "${x.nome}" como cliente?`)) return;
       const novo = DB.salvarItem('clientes', {
@@ -555,11 +592,20 @@ function telaProspeccao(el) {
   });
   const marcar = (sel, k) => $(sel, el).addEventListener('change', (ev) => { e[k] = ev.target.checked; e.pagina = 1; desenhar(); });
   marcar('#p-clientes', 'mostrarClientes'); marcar('#p-recusas', 'esconderRecusas'); marcar('#p-fone', 'soComTelefone');
-  form.addEventListener('submit', (ev) => {
-    ev.preventDefault();
+  const lerFiltros = () => {
     const d = lerForm(form);
     Object.assign(e, { cidade: d.cidade.trim(), uf: d.uf, categoria: d.categoria, nome: (d.nome || '').trim(), pagina: 1 });
-    const botao = $('#p-buscar', el);
+    guardarEstado('prospeccao', e);
+  };
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    lerFiltros();
+    mostrarMapa();
+    desenharAnotadas();
+  });
+  $('#p-auto', el).addEventListener('click', () => {
+    lerFiltros();
+    const botao = $('#p-auto', el);
     if (botao.disabled) return;
     botao.disabled = true;
     lista.innerHTML = '<div class="vazio">Pesquisando... pode levar até 1 minuto.</div>';
@@ -573,10 +619,10 @@ function telaProspeccao(el) {
       } catch (err) {
         $('#p-resumo', el).innerHTML = '';
         lista.innerHTML = `<div class="alerta-perigo" style="margin:12px"><b>A pesquisa não funcionou.</b><br>${esc(err.message)}
-          <p class="ajuda">Tente de novo em alguns segundos. Enquanto isso, use o botão "Ver no Google Maps".</p></div>`;
+          <p class="ajuda">O mapa gratuito está fora do ar ou bloqueado neste computador. Use o mapa do Google acima.</p></div>`;
       } finally {
         botao.disabled = false;
-        botao.textContent = 'Pesquisar';
+        botao.textContent = 'Buscar lista automática';
       }
     })();
   });
