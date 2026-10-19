@@ -328,7 +328,7 @@ async function buscarJSON(url, opcoes, etapa, segundos = 25, sinalExterno) {
     try { r = await fetch(url, { ...opcoes, signal: ctrl.signal }); } catch (err) {
       if (ctrl.signal.aborted && ctrl.signal.reason === 'tempo') throw new Error(`${etapa}: o servidor demorou mais de ${segundos} segundos para responder.`);
       if (ctrl.signal.aborted) throw new Error(`${etapa}: cancelado.`);
-      throw new Error(`${etapa}: sem resposta do servidor (${err.message}). Verifique a internet; antivírus ou rede da empresa podem bloquear.`);
+      throw new Error(`${etapa}: sem resposta do servidor (${err.message}). Se usa o navegador Brave, desligue o "Shields" (ícone do leão) para este site; antivírus ou rede da empresa também podem bloquear.`);
     }
     if (!r.ok) {
       throw new Error(`${etapa}: o servidor respondeu com erro ${r.status}${r.status === 429 || r.status === 504 ? ' (está ocupado)' : ''}.`);
@@ -337,6 +337,41 @@ async function buscarJSON(url, opcoes, etapa, segundos = 25, sinalExterno) {
   } finally {
     clearTimeout(relogio);
   }
+}
+// Municípios oficiais do IBGE por UF (sugestões no campo Cidade e correção de nomes digitados errado).
+const cacheMunicipios = {};
+async function municipiosDaUF(uf) {
+  if (cacheMunicipios[uf]) return cacheMunicipios[uf];
+  try {
+    const salvo = JSON.parse(sessionStorage.getItem('berbert-municipios-' + uf) || 'null');
+    if (salvo) return (cacheMunicipios[uf] = salvo);
+  } catch { /* sem armazenamento */ }
+  const lista = (await buscarJSON(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`, {}, 'Lista de cidades', 15))
+    .map((m) => m.nome).sort((a, b) => a.localeCompare(b));
+  cacheMunicipios[uf] = lista;
+  try { sessionStorage.setItem('berbert-municipios-' + uf, JSON.stringify(lista)); } catch { /* sem armazenamento */ }
+  return lista;
+}
+function distancia(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  }
+  return d[a.length][b.length];
+}
+// Nome oficial mais parecido com o digitado ("Barboza Ferraz" -> "Barbosa Ferraz"); null se nenhum for parecido.
+function corrigirCidade(digitado, lista) {
+  const alvo = normalizar(digitado);
+  if (!alvo || !lista || !lista.length) return null;
+  const exato = lista.find((m) => normalizar(m) === alvo);
+  if (exato) return exato;
+  let melhor = null, menor = Infinity;
+  for (const m of lista) {
+    const dist = distancia(alvo, normalizar(m));
+    if (dist < menor) { menor = dist; melhor = m; }
+  }
+  return menor <= Math.max(2, Math.floor(alvo.length / 6)) ? melhor : null;
 }
 // Acha a cidade no mapa: primeiro pelos campos cidade/estado, depois pelo texto livre.
 async function acharCidade(cidade, uf) {
@@ -437,7 +472,7 @@ function telaProspeccao(el) {
   const e = estadoProsp;
   el.innerHTML = `
     <form class="cartao filtros-lig" id="p-form">
-      <label>Cidade<input name="cidade" value="${esc(e.cidade)}" required></label>
+      <label>Cidade<input name="cidade" value="${esc(e.cidade)}" list="p-cidades" required autocomplete="off"><datalist id="p-cidades"></datalist></label>
       <label>UF<select name="uf">${Object.keys(UFS).map((u) => `<option ${u === e.uf ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
       <label>Tipo de empresa<select name="categoria">${CATEGORIAS_PROSPECCAO.map(([k, r]) => `<option value="${k}" ${k === e.categoria ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
       <label>Nome contém (opcional)<input name="nome" value="${esc(e.nome)}" placeholder="Ex.: pizzaria"></label>
@@ -592,18 +627,39 @@ function telaProspeccao(el) {
   });
   const marcar = (sel, k) => $(sel, el).addEventListener('change', (ev) => { e[k] = ev.target.checked; e.pagina = 1; desenhar(); });
   marcar('#p-clientes', 'mostrarClientes'); marcar('#p-recusas', 'esconderRecusas'); marcar('#p-fone', 'soComTelefone');
+  // Sugestões de cidade da UF escolhida e correção do nome digitado.
+  const carregarCidades = async () => {
+    try {
+      const lista = await municipiosDaUF(form.uf.value);
+      $('#p-cidades', el).innerHTML = lista.map((m) => `<option value="${esc(m)}">`).join('');
+      return lista;
+    } catch { return null; }
+  };
+  form.uf.addEventListener('change', carregarCidades);
+  carregarCidades();
+  const corrigirCampoCidade = async () => {
+    const lista = await carregarCidades();
+    const certo = corrigirCidade(form.cidade.value, lista);
+    if (certo && certo !== form.cidade.value.trim()) {
+      if (normalizar(certo) !== normalizar(form.cidade.value)) avisar(`Cidade corrigida para "${certo}".`);
+      form.cidade.value = certo;
+      atualizarGoogle();
+    }
+  };
   const lerFiltros = () => {
     const d = lerForm(form);
     Object.assign(e, { cidade: d.cidade.trim(), uf: d.uf, categoria: d.categoria, nome: (d.nome || '').trim(), pagina: 1 });
     guardarEstado('prospeccao', e);
   };
-  form.addEventListener('submit', (ev) => {
+  form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    await corrigirCampoCidade();
     lerFiltros();
     mostrarMapa();
     desenharAnotadas();
   });
-  $('#p-auto', el).addEventListener('click', () => {
+  $('#p-auto', el).addEventListener('click', async () => {
+    await corrigirCampoCidade();
     lerFiltros();
     const botao = $('#p-auto', el);
     if (botao.disabled) return;

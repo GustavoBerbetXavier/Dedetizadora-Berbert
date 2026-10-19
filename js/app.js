@@ -504,7 +504,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-19.7';
+const VERSAO_APP = '2026-10-19.8';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
