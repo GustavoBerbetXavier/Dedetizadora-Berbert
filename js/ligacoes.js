@@ -353,19 +353,30 @@ async function acharCidade(cidade, uf) {
   throw new Error(`Procurar a cidade: "${cidade} - ${uf}" não foi encontrada no mapa. Confira o nome (com acento) e a UF.`);
 }
 // Pergunta a todos os servidores ao mesmo tempo e usa a primeira resposta; os outros são cancelados.
+// Se o navegador não conseguir falar com nenhum (bloqueio do navegador/antivírus), pede ao Supabase.
 async function consultarOverpass(consulta) {
   const cancelar = new AbortController();
-  const pedidos = SERVIDORES_OVERPASS.map((url) => buscarJSON(url, { method: 'POST', body: 'data=' + encodeURIComponent(consulta),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }, 'Buscar as empresas', 45, cancelar.signal)
+  const pedidos = SERVIDORES_OVERPASS.map((url) => buscarJSON(`${url}?data=${encodeURIComponent(consulta)}`, {}, 'Buscar as empresas', 45, cancelar.signal)
     .then((d) => { if (d.remark && /runtime error|timed out/i.test(d.remark) && !(d.elements || []).length) throw new Error('Buscar as empresas: o servidor não terminou a busca.'); return d; }));
+  let erroNavegador;
   try {
     return await Promise.any(pedidos);
   } catch (err) {
     const erros = (err.errors || []).map((x) => x.message);
-    throw new Error(erros.find((m) => !m.endsWith('cancelado.')) || 'Buscar as empresas: nenhum servidor respondeu.');
+    erroNavegador = erros.find((m) => !m.endsWith('cancelado.')) || 'Buscar as empresas: nenhum servidor respondeu.';
   } finally {
     cancelar.abort();
   }
+  try {
+    const d = await DB.prospectar(consulta);
+    if (d && Array.isArray(d.elements)) return d;
+  } catch (err) {
+    if (/prospectar|function|função|schema cache/i.test(err.message)) {
+      throw new Error(`${erroNavegador} O navegador deste computador está bloqueando o servidor de mapas. Para a busca passar pelo Supabase, o administrador precisa executar uma vez o arquivo supabase/prospeccao.sql no SQL Editor.`);
+    }
+    throw new Error(`${erroNavegador} Tentativa pelo Supabase: ${err.message}`);
+  }
+  throw new Error(erroNavegador);
 }
 
 async function buscarEmpresas(cidade, uf, categoria, nome, progresso = () => {}) {

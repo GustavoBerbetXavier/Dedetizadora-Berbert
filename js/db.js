@@ -161,6 +161,12 @@ const DB = (() => {
     carregadoHa: () => Date.now() - ultimaCarga,
     tabelaFaltando: (col) => faltando.has(col),
     // Último serviço feito para cada cliente (lido no banco, para quem não tem acesso aos orçamentos).
+    // Busca de empresas feita pelo Supabase (quando o navegador bloqueia o servidor de mapas).
+    async prospectar(consulta) {
+      const { data, error } = await sb.rpc('prospectar', { p_consulta: consulta });
+      if (error) throw new Error(traduzirErro(error));
+      return data;
+    },
     async ultimosServicos() {
       const { data, error } = await sb.rpc('ultimos_servicos');
       if (error) throw new Error(traduzirErro(error));
