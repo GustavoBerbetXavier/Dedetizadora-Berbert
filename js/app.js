@@ -506,7 +506,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-20.2';
+const VERSAO_APP = '2026-10-20.3';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2153,6 +2153,7 @@ function financeiro(el) {
           ['apagar', 'Contas a pagar em aberto'], ['areceber', 'Contas a receber em aberto']], estadoFin.tipo)}</select>
         <button class="btn" id="nova-rec">+ Receita</button>
         <button class="btn perigo" id="nova-desp">+ Despesa</button>
+        <button class="btn sec" id="importar-extrato">Importar extrato</button>
       </div></div>
     ${emAberto ? `<div class="grade-kpi">
       <div class="kpi"><div class="rotulo">Total ${emAberto === 'despesa' ? 'a pagar' : 'a receber'} em aberto</div><div class="valor">${moeda(somaLista(() => true))}</div></div>
@@ -2185,6 +2186,7 @@ function financeiro(el) {
   $('#tipo', el).addEventListener('change', (e) => { estadoFin.tipo = e.target.value; financeiro(el); });
   $('#nova-rec', el).addEventListener('click', () => formFinanceiro(null, { tipo: 'receita', categoria: 'Serviços' }));
   $('#nova-desp', el).addEventListener('click', () => formFinanceiro(null, { tipo: 'despesa' }));
+  $('#importar-extrato', el).addEventListener('click', importarExtrato);
   el.querySelector('.cartao').addEventListener('click', (e) => {
     const b = e.target.closest('[data-acao]');
     if (!b) return;
