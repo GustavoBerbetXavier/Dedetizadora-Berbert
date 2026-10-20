@@ -426,3 +426,7 @@ td.num, th.num { text-align: right; }
 .form .opcao-marcar span { flex: 1; }
 .pdf-temporario { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; }
 .pdf-temporario .doc { max-width: none; padding: 0 4px; }
+.menu a.link-externo { border-top: 1px solid var(--borda); color: #1b5580; font-weight: 600; }
+.menu a.link-externo .icone { color: #1b5580; }
+.menu a.link-externo .seta-ext { margin-left: auto; width: 15px; height: 15px; }
+.menu a.link-externo span { white-space: nowrap; }
