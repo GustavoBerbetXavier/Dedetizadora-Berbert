@@ -268,6 +268,8 @@ const ROTAS = [
   { rota: 'agenda', titulo: 'Agenda', modulo: 'agenda', fn: agenda },
   { rota: 'orcamentos', titulo: 'Orçamentos', modulo: 'orcamentos', fn: orcamentos },
   { rota: 'laudos', titulo: 'Laudos', modulo: 'laudos', fn: laudos },
+  // Página de um laudo: 'laudo/<id>', 'laudo/novo' (dedetização) ou 'laudo/novo-caixa' (caixa d'água).
+  { rota: 'laudo', titulo: 'Laudo', modulo: 'laudos', fn: paginaLaudo, foraDoMenu: true, menu: 'laudos' },
   { rota: 'financeiro', titulo: 'Financeiro', modulo: 'financeiro', fn: financeiro },
   { rota: 'ligacoes', titulo: 'Ligações', modulo: 'ligacoes', fn: ligacoes },
   // Página de uma ordem/orçamento: 'orcamento/<id>' (ou 'orcamento/novo').
@@ -504,7 +506,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-19.8';
+const VERSAO_APP = '2026-10-20.1';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2120,112 +2122,7 @@ function imprimirOrcamento(o) {
   </div>`);
 }
 
-/* =====================================================================
-   LAUDOS (Certificado de execução de serviço)
-   ===================================================================== */
-const COLS_PROD = [
-  { nome: 'produto', rotulo: 'Produto (nome comercial)' },
-  { nome: 'principio', rotulo: 'Princípio ativo' },
-  { nome: 'grupo', rotulo: 'Grupo químico' },
-  { nome: 'registro', rotulo: 'Registro MS', largura: '120px' },
-  { nome: 'quantidade', rotulo: 'Qtd / diluição', largura: '120px' },
-];
-
-function laudos(el) {
-  const lista = DB.listar('laudos').sort((a, b) => b.numero - a.numero);
-  el.innerHTML = `
-    <div class="cabecalho"><h2>Laudos / Certificados</h2><button class="btn" id="novo">+ Novo laudo</button></div>
-    <div class="cartao" style="padding:0">${lista.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Pragas alvo</th><th>Garantia até</th><th>Ações</th></tr></thead><tbody>
-      ${lista.map((l) => {
-        const ate = l.garantiaDias ? somarDias(l.data, l.garantiaDias) : '';
-        return `<tr><td>${l.numero}</td><td>${dataBR(l.data)}</td><td>${esc(nomeCliente(l.clienteId))}</td><td>${esc(l.pragas)}</td>
-        <td>${ate ? `${dataBR(ate)} ${ate < hojeISO() ? '<span class="tag cinza">vencida</span>' : '<span class="tag verde">vigente</span>'}` : '—'}</td>
-        <td><div class="acoes">
-          <button class="btn peq" data-acao="imprimir" data-id="${l.id}">Imprimir / PDF</button>
-          <button class="btn sec peq" data-acao="editar" data-id="${l.id}">Editar</button>
-          <button class="btn sec peq" data-acao="excluir" data-id="${l.id}">Excluir</button>
-        </div></td></tr>`;
-      }).join('')}
-    </tbody></table></div>` : '<div class="vazio">Nenhum laudo emitido.</div>'}</div>`;
-  $('#novo', el).addEventListener('click', () => formLaudo(null));
-  el.querySelector('.cartao').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-acao]');
-    if (!b) return;
-    const l = DB.obter('laudos', b.dataset.id);
-    if (b.dataset.acao === 'imprimir') imprimirLaudo(l);
-    if (b.dataset.acao === 'editar') formLaudo(l.id);
-    if (b.dataset.acao === 'excluir' && confirmar('Excluir este laudo?')) { DB.remover('laudos', l.id); render(); }
-  });
-}
-
-function formLaudo(id, padrao = {}) {
-  const cfg = DB.config();
-  const l = id ? DB.obter('laudos', id) : {
-    data: hojeISO(), garantiaDias: 90, produtos: [],
-    responsavel: cfg.responsavelTecnico, registroResp: cfg.registroResp,
-    ...padrao,
-  };
-  abrirModal(id ? `Editar laudo nº ${l.numero}` : 'Novo laudo / certificado', `
-    <form class="form">
-      ${campoCliente(l.clienteId)}
-      ${campo('Data da execução', 'data', l.data, 'date', 'required')}
-      ${campo('Garantia (dias)', 'garantiaDias', l.garantiaDias, 'number', 'min="0"')}
-      ${campo('Pragas alvo', 'pragas', l.pragas, 'text', 'full placeholder="Baratas, formigas, ratos, cupins..."')}
-      ${campo('Áreas tratadas', 'areas', l.areas, 'text', 'full placeholder="Cozinha, banheiros, área externa..."')}
-      ${campo('Método de aplicação', 'metodo', l.metodo, 'text', 'full placeholder="Pulverização, gel, iscas, polvilhamento..."')}
-      <div class="full"><b style="font-size:13px;color:var(--suave)">Produtos utilizados</b></div>
-      ${editorLinhas(COLS_PROD, l.produtos || [])}
-      ${campo('Antídoto / tratamento em caso de intoxicação', 'antidoto', l.antidoto, 'textarea', 'full')}
-      ${campo('Recomendações ao cliente', 'recomendacoes', l.recomendacoes ?? 'Manter o ambiente fechado por pelo menos 2 horas após a aplicação. Evitar contato de crianças e animais com as áreas tratadas até a secagem completa. Não lavar as áreas tratadas por 7 dias.', 'textarea', 'full')}
-      ${campo('Responsável técnico', 'responsavel', l.responsavel)}
-      ${campo('Registro (CRQ/CRBio/CREA)', 'registroResp', l.registroResp)}
-      ${campo('Observações', 'obs', l.obs, 'textarea', 'full')}
-      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
-    </form>`, (raiz) => {
-    const form = $('form', raiz);
-    ligarCampoCliente(raiz);
-    ligarLinhas(raiz, COLS_PROD);
-    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      if (!clienteValido(form)) return;
-      const dados = lerForm(form);
-      const produtos = lerLinhas(raiz, COLS_PROD);
-      enviando($('#salvar', raiz), async () => {
-        const numero = id ? l.numero : await DB.proximoNumero('laudo');
-        DB.salvarItem('laudos', { ...dados, produtos, id: id || undefined, numero });
-        fecharModal();
-        if (rotaAtual() === 'laudos') render(); else irPara('laudos');
-      });
-    });
-  });
-}
-
-function imprimirLaudo(l) {
-  const cli = DB.obter('clientes', l.clienteId);
-  const cfg = DB.config();
-  imprimir(`<div class="doc">${cabecalhoDoc()}
-    <h2>Certificado de Execução de Serviço nº ${l.numero}</h2>
-    <div class="info"><div><b>Data da execução:</b> ${dataBR(l.data)}</div>
-      <div><b>Garantia:</b> ${l.garantiaDias ? `${l.garantiaDias} dias (até ${dataBR(somarDias(l.data, l.garantiaDias))})` : '—'}</div></div>
-    ${blocoCliente(cli)}
-    <h3>Serviço executado</h3>
-    <div class="info"><div><b>Pragas alvo:</b> ${esc(l.pragas)}</div><div><b>Método:</b> ${esc(l.metodo)}</div>
-      <div style="grid-column:1/-1"><b>Áreas tratadas:</b> ${esc(l.areas)}</div></div>
-    <h3>Produtos utilizados</h3>
-    ${(l.produtos || []).length ? `<table><thead><tr><th>Produto</th><th>Princípio ativo</th><th>Grupo químico</th><th>Registro MS</th><th>Qtd / diluição</th></tr></thead><tbody>
-      ${l.produtos.map((p) => `<tr><td>${esc(p.produto)}</td><td>${esc(p.principio)}</td><td>${esc(p.grupo)}</td><td>${esc(p.registro)}</td><td>${esc(p.quantidade)}</td></tr>`).join('')}
-    </tbody></table>` : '<p>—</p>'}
-    ${l.antidoto ? `<h3>Antídoto / tratamento</h3><p style="white-space:pre-line">${esc(l.antidoto)}</p>` : ''}
-    <p><b>Em caso de intoxicação:</b> procure atendimento médico levando este certificado. Disque-Intoxicação (ANVISA): 0800 722 6001.</p>
-    ${l.recomendacoes ? `<h3>Recomendações</h3><p style="white-space:pre-line">${esc(l.recomendacoes)}</p>` : ''}
-    ${l.obs ? `<h3>Observações</h3><p style="white-space:pre-line">${esc(l.obs)}</p>` : ''}
-    <div class="assinatura">
-      <div>${esc(l.responsavel || cfg.responsavelTecnico || 'Responsável técnico')}<br>${esc(l.registroResp || '')}</div>
-      <div>${esc(cli ? cli.nome : 'Cliente')}</div>
-    </div>
-  </div>`);
-}
+/* Laudos (certificado de dedetização e laudo de caixa d'água): js/laudos.js */
 
 /* =====================================================================
    FINANCEIRO

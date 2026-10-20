@@ -394,3 +394,31 @@ td.num, th.num { text-align: right; }
 .prosp-auto summary { cursor: pointer; font-weight: 600; }
 .prosp-auto[open] summary { margin-bottom: 10px; }
 @media (max-width: 900px) { .prosp-grade { grid-template-columns: 1fr; } .prosp-mapa iframe { height: 420px; } }
+.secao-form > b { display: block; font-size: 13px; color: var(--suave); margin-bottom: 6px; }
+.grupo-marcar { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; margin-bottom: 6px; }
+.grupo-marcar.uma-coluna { grid-template-columns: 1fr; }
+.opcao-marcar { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; cursor: pointer; font-size: 14px; background: #fff; }
+.opcao-marcar:has(input:checked) { border-color: var(--primaria); background: #eef7f0; }
+.opcao-marcar input { margin-top: 2px; }
+.opcao-marcar small { color: var(--suave); display: block; }
+.produtos-laudo { display: grid; gap: 8px; }
+.produto-laudo { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; align-items: center; }
+.produto-laudo > input { padding: 9px; border: 1px solid var(--borda); border-radius: 8px; font-size: 14px; font-family: inherit; }
+.reservatorio { display: grid; grid-template-columns: 80px repeat(4, minmax(0, 1fr)) auto; gap: 8px; align-items: end; margin-bottom: 8px; }
+.reservatorio label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--suave); }
+.reservatorio select, .reservatorio input { padding: 8px; border: 1px solid var(--borda); border-radius: 8px; font-size: 14px; font-family: inherit; }
+.fotos-etapas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.fotos-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.fotos-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.foto-item { margin: 0; border: 1px solid var(--borda); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 6px; background: #fff; }
+.foto-item img, .foto-carregando { width: 100%; height: 120px; object-fit: cover; border-radius: 6px; background: #eee; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--suave); }
+.foto-item input { padding: 6px; border: 1px solid var(--borda); border-radius: 6px; font-size: 13px; }
+.fotos-laudo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fotos-laudo-tit { font-weight: bold; text-align: center; background: #eee; padding: 4px; margin-bottom: 6px; }
+.fotos-laudo figure { margin: 0 0 8px; break-inside: avoid; page-break-inside: avoid; }
+.fotos-laudo img { width: 100%; height: 6.5cm; object-fit: cover; border: 1px solid #bbb; display: block; }
+.fotos-laudo figcaption { font-size: 11px; text-align: center; margin-top: 2px; }
+.laudo-conclusao { margin-top: 14px; }
+@media (max-width: 760px) { .reservatorio { grid-template-columns: 1fr 1fr; } .fotos-etapas { grid-template-columns: 1fr; } .produto-laudo { grid-template-columns: 1fr; } }
+.form .opcao-marcar, .opcao-marcar { flex-direction: row; align-items: flex-start; color: var(--texto); }
+.form .opcao-marcar span { flex: 1; }

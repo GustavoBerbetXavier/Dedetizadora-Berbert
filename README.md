@@ -16,9 +16,12 @@ dados na nuvem (Supabase), com login para cada funcionário.
   **gerar o laudo** e **lançar a receita** com um clique.
 - **Orçamentos**: itens, desconto, validade e forma de pagamento. Imprime ou salva
   em PDF com a logo da empresa. Ao aprovar, já abre o agendamento.
-- **Laudos / Certificados de execução**: pragas, áreas, método, produtos
-  (princípio ativo, grupo químico, registro MS), antídoto, recomendações, garantia
-  e responsável técnico. Imprime ou salva em PDF com a logo.
+- **Laudos / Certificados**, com opções para marcar em vez de digitar:
+  - **Certificado de dedetização**: pragas, áreas, método, os 4 venenos da ficha (com antídoto
+    automático), garantia, responsável técnico e recomendações.
+  - **Laudo de limpeza de caixa d'água**: reservatórios (tipo, material, capacidade, local), condições
+    encontradas, procedimento, desinfetante, validade e **fotos do antes e do depois** (pelo celular ou
+    computador). Imprime ou salva em PDF com as fotos. **Requer rodar `supabase/fotos.sql` uma vez.**
 - **Financeiro**: receitas e despesas por mês, contas pagas, em aberto e vencidas.
 - **Ligações**: vencimentos (quem está para vencer, pelo último serviço ou contrato) e prospecção de
   empresas por cidade e tipo que ainda não são clientes, com ligar, WhatsApp e registro do resultado.

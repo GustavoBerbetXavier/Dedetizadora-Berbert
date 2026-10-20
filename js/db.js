@@ -39,6 +39,13 @@ const DB = (() => {
     contadorId += 1;
     return Date.now().toString(36) + (contadorId).toString(36) + Math.random().toString(36).slice(2, 10);
   }
+  function erroFotos(error) {
+    const m = String((error && (error.message || error.error)) || error);
+    if (/bucket not found|not found/i.test(m)) return 'o armazenamento de fotos ainda não foi criado. O administrador precisa executar o arquivo supabase/fotos.sql no SQL Editor do Supabase.';
+    if (/row-level security|unauthorized|403/i.test(m)) return 'sem permissão para fotos (precisa do acesso a Laudos). Se for o administrador, execute o arquivo supabase/fotos.sql no Supabase.';
+    if (/payload too large|exceeded|413/i.test(m)) return 'a foto é grande demais.';
+    return m;
+  }
   function configurado() {
     const c = window.BERBERT_CONFIG || {};
     return Boolean(c.supabaseUrl && c.supabaseAnonKey);
@@ -161,6 +168,23 @@ const DB = (() => {
     carregadoHa: () => Date.now() - ultimaCarga,
     tabelaFaltando: (col) => faltando.has(col),
     // Último serviço feito para cada cliente (lido no banco, para quem não tem acesso aos orçamentos).
+    /* ---------- Fotos (Supabase Storage, pasta "fotos") ---------- */
+    async enviarFoto(caminho, blob) {
+      const { error } = await sb.storage.from('fotos').upload(caminho, await blob.arrayBuffer(), { contentType: 'image/jpeg', upsert: false });
+      if (error) throw new Error(erroFotos(error));
+    },
+    // Endereços temporários (1 hora) para mostrar e imprimir as fotos.
+    async urlsFotos(caminhos) {
+      if (!caminhos.length) return {};
+      const { data, error } = await sb.storage.from('fotos').createSignedUrls(caminhos, 3600);
+      if (error) throw new Error(erroFotos(error));
+      return Object.fromEntries((data || []).filter((x) => x.signedUrl).map((x) => [x.path, x.signedUrl]));
+    },
+    async removerFotos(caminhos) {
+      if (!caminhos.length) return;
+      const { error } = await sb.storage.from('fotos').remove(caminhos);
+      if (error) throw new Error(erroFotos(error));
+    },
     // Busca de empresas feita pelo Supabase (quando o navegador bloqueia o servidor de mapas).
     async prospectar(consulta) {
       const { data, error } = await sb.rpc('prospectar', { p_consulta: consulta });
