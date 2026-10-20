@@ -23,27 +23,10 @@ const LOCAIS_RESERV = ['Telhado / forro', 'Sobre a laje', 'Torre', 'Térreo', 'S
 const CONDICOES_CAIXA = ['Sedimentos / sujeira no fundo', 'Lodo ou limo nas paredes', 'Insetos ou larvas', 'Animais mortos',
   'Tampa ausente, quebrada ou mal vedada', 'Rachaduras ou infiltrações', 'Ferrugem / corrosão', 'Boia com defeito',
   'Bom estado de conservação'];
-const PROCEDIMENTOS_CAIXA = [
-  'Fechamento do registro de entrada e esvaziamento do reservatório.',
-  'Vedação da saída para a sujeira não descer pela tubulação.',
-  'Escovação das paredes, fundo e tampa com escova de fibra (sem sabão, detergente ou produtos abrasivos).',
-  'Remoção dos resíduos e da água suja, com enxágue.',
-  'Desinfecção das paredes com solução clorada, respeitando o tempo de contato.',
-  'Esvaziamento, enxágue final e reabastecimento.',
-  'Fechamento com a tampa e verificação da vedação.',
-];
 const DESINFETANTES = ['Hipoclorito de sódio 2,5%', 'Hipoclorito de sódio 10 a 12%', 'Hipoclorito de cálcio (cloro granulado)'];
 const CONCENTRACOES_SOL = ['50 ppm de cloro livre', '100 ppm de cloro livre', '200 ppm de cloro livre'];
 const TEMPOS_CONTATO = ['30 minutos', '1 hora', '2 horas'];
 const VALIDADES_CAIXA = [[3, '3 meses'], [6, '6 meses'], [12, '12 meses']];
-const RECOMENDACOES_CAIXA = [
-  'Realizar nova limpeza e desinfecção a cada 6 meses.',
-  'Manter o reservatório sempre tampado e bem vedado.',
-  'Não usar a água nas primeiras horas após o reabastecimento, se houver cheiro forte de cloro.',
-  'Verificar periodicamente a boia e a tampa.',
-  'Manter o acesso ao reservatório limpo e livre de entulho.',
-];
-
 /* ---------- Ajudantes de formulário ---------- */
 // Grupo de opções para marcar. 'marcados' é a lista do que já estava marcado.
 function grupoMarcar(nome, opcoesLista, marcados = [], colunas = '') {
@@ -107,6 +90,7 @@ function laudos(el) {
         <td>${ate ? `${dataBR(ate)} ${ate < hojeISO() ? '<span class="tag cinza">vencida</span>' : '<span class="tag verde">vigente</span>'}` : '—'}</td>
         <td><div class="acoes">
           <button class="btn peq" data-acao="imprimir" data-id="${l.id}">Imprimir / PDF</button>
+          <button class="btn sec peq whats" data-acao="whats" data-id="${l.id}">WhatsApp</button>
           <button class="btn sec peq" data-acao="editar" data-id="${l.id}">Editar</button>
           <button class="btn sec peq" data-acao="excluir" data-id="${l.id}">Excluir</button>
         </div></td></tr>`;
@@ -119,6 +103,7 @@ function laudos(el) {
     if (!b) return;
     const l = DB.obter('laudos', b.dataset.id);
     if (b.dataset.acao === 'imprimir') enviando(b, () => imprimirLaudo(l));
+    if (b.dataset.acao === 'whats') enviarLaudoWhatsApp(l, b);
     if (b.dataset.acao === 'editar') irPara('laudo/' + l.id);
     if (b.dataset.acao === 'excluir' && confirmar('Excluir este laudo?')) {
       const caminhos = (l.fotos || []).map((f) => f.caminho);
@@ -144,7 +129,8 @@ function paginaLaudo(el, id) {
 }
 function topoLaudo(titulo, l) {
   return `<div class="pagina-topo"><button class="btn sec peq" id="voltar">&lsaquo; Laudos</button><h2>${titulo}</h2>
-    ${l ? '<div class="acoes" style="margin-left:auto"><button class="btn peq" id="imp-laudo">Imprimir / PDF</button></div>' : ''}</div>`;
+    ${l ? `<div class="acoes" style="margin-left:auto"><button class="btn peq" id="imp-laudo">Imprimir / PDF</button>
+      <button class="btn sec peq whats" id="whats-laudo">Enviar pelo WhatsApp</button></div>` : ''}</div>`;
 }
 async function salvarLaudo(dados, l, laudoId) {
   const numero = l ? l.numero : await DB.proximoNumero('laudo');
@@ -185,7 +171,10 @@ function formDedetizacao(el, l, padrao) {
   ligarCampoCliente(el);
   $('#voltar', el).addEventListener('click', () => irPara('laudos'));
   $('#cancelar', el).addEventListener('click', () => irPara('laudos'));
-  if (l) $('#imp-laudo', el).addEventListener('click', (e) => enviando(e.target, () => imprimirLaudo(DB.obter('laudos', l.id))));
+  if (l) {
+    $('#imp-laudo', el).addEventListener('click', (e) => enviando(e.target, () => imprimirLaudo(DB.obter('laudos', l.id))));
+    $('#whats-laudo', el).addEventListener('click', (e) => enviarLaudoWhatsApp(DB.obter('laudos', l.id), e.target));
+  }
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!clienteValido(form)) return;
@@ -248,9 +237,9 @@ async function comprimirFoto(arquivo) {
 function formCaixa(el, l) {
   const cfg = DB.config();
   const laudoId = l ? l.id : DB.novoId();
-  const x = l || { data: hojeISO(), validadeMeses: 6, reservatorios: [{}], procedimentos: PROCEDIMENTOS_CAIXA.slice(),
+  const x = l || { data: hojeISO(), validadeMeses: 6, reservatorios: [{}],
     desinfetante: DESINFETANTES[0], concentracaoSol: CONCENTRACOES_SOL[2], tempoContato: TEMPOS_CONTATO[2],
-    recomendacoesLista: RECOMENDACOES_CAIXA.slice(0, 4), responsavel: cfg.responsavelTecnico, registroResp: cfg.registroResp, fotos: [] };
+    responsavel: cfg.responsavelTecnico, registroResp: cfg.registroResp, fotos: [] };
   const fotos = (x.fotos || []).map((f) => ({ ...f }));
   const enviadasAgora = []; // fotos enviadas nesta edição (apagadas se cancelar)
   const removidas = []; // fotos tiradas nesta edição (apagadas ao salvar)
@@ -265,10 +254,12 @@ function formCaixa(el, l) {
         <div id="reservatorios">${(x.reservatorios && x.reservatorios.length ? x.reservatorios : [{}]).map(linhaReservatorio).join('')}</div>
         <button type="button" class="btn sec peq" id="add-reserv">+ Adicionar reservatório</button></div>
       <div class="full secao-form"><b>Condições encontradas</b>${grupoMarcar('condicoes', CONDICOES_CAIXA, x.condicoes || [])}</div>
-      <div class="full secao-form"><b>Procedimento realizado</b>${grupoMarcar('procedimentos', PROCEDIMENTOS_CAIXA, x.procedimentos || [], 'uma-coluna')}</div>
-      <label>Produto desinfetante<select name="desinfetante">${opcoesSimples(DESINFETANTES, x.desinfetante)}</select></label>
-      <label>Concentração da solução<select name="concentracaoSol">${opcoesSimples(CONCENTRACOES_SOL, x.concentracaoSol)}</select></label>
-      <label>Tempo de contato<select name="tempoContato">${opcoesSimples(TEMPOS_CONTATO, x.tempoContato)}</select></label>
+      <label>Produto desinfetante (escolha ou digite)<input name="desinfetante" list="lista-desinf" value="${esc(x.desinfetante || '')}" autocomplete="off">
+        <datalist id="lista-desinf">${DESINFETANTES.map((o) => `<option value="${esc(o)}">`).join('')}</datalist></label>
+      <label>Concentração da solução (escolha ou digite)<input name="concentracaoSol" list="lista-conc" value="${esc(x.concentracaoSol || '')}" autocomplete="off">
+        <datalist id="lista-conc">${CONCENTRACOES_SOL.map((o) => `<option value="${esc(o)}">`).join('')}</datalist></label>
+      <label>Tempo de contato (escolha ou digite)<input name="tempoContato" list="lista-tempo" value="${esc(x.tempoContato || '')}" autocomplete="off">
+        <datalist id="lista-tempo">${TEMPOS_CONTATO.map((o) => `<option value="${esc(o)}">`).join('')}</datalist></label>
       <label>Técnico que executou${seletorPessoa('tecnico', 'controlador', x.tecnico)}</label>
       <label>Responsável técnico${seletorPessoa('responsavel', 'responsavel_tecnico', x.responsavel)}</label>
       <div class="full secao-form"><b>Fotos</b>
@@ -278,7 +269,6 @@ function formCaixa(el, l) {
             <label class="btn sec peq">Adicionar fotos<input type="file" accept="image/*" multiple hidden data-etapa="${etapa}"></label></div>
             <div class="fotos-grade" data-grade="${etapa}"></div></div>`).join('')}
         </div></div>
-      <div class="full secao-form"><b>Recomendações ao cliente</b>${grupoMarcar('recomendacoes', RECOMENDACOES_CAIXA, x.recomendacoesLista || [], 'uma-coluna')}</div>
       ${campo('Observações', 'obs', x.obs, 'textarea', 'full')}
       <div class="form-acoes"><button type="button" class="btn sec" id="cancelar">Cancelar</button><button class="btn" id="salvar">Salvar</button></div>
     </form>`;
@@ -291,7 +281,10 @@ function formCaixa(el, l) {
   };
   $('#voltar', el).addEventListener('click', sair);
   $('#cancelar', el).addEventListener('click', sair);
-  if (l) $('#imp-laudo', el).addEventListener('click', (e) => enviando(e.target, () => imprimirLaudo(DB.obter('laudos', l.id))));
+  if (l) {
+    $('#imp-laudo', el).addEventListener('click', (e) => enviando(e.target, () => imprimirLaudo(DB.obter('laudos', l.id))));
+    $('#whats-laudo', el).addEventListener('click', (e) => enviarLaudoWhatsApp(DB.obter('laudos', l.id), e.target));
+  }
 
   // Reservatórios
   const caixaReserv = $('#reservatorios', el);
@@ -369,11 +362,11 @@ function formCaixa(el, l) {
     if (reservatorios.some((r) => !r.capacidade)) { avisar('Informe a capacidade do reservatório (em litros).', 'erro'); return; }
     const dados = {
       tipo: 'caixa', clienteId: d.clienteId, data: d.data, validadeMeses: Number(d.validadeMeses) || 6,
-      reservatorios, condicoes: lerGrupo(form, 'condicoes'), procedimentos: lerGrupo(form, 'procedimentos'),
+      reservatorios, condicoes: lerGrupo(form, 'condicoes'),
       desinfetante: d.desinfetante, concentracaoSol: d.concentracaoSol, tempoContato: d.tempoContato,
       tecnico: d.tecnico, responsavel: d.responsavel,
       registroResp: registroDe(form, 'responsavel') || (l && l.responsavel === d.responsavel ? l.registroResp : ''),
-      recomendacoesLista: lerGrupo(form, 'recomendacoes'), obs: d.obs,
+      obs: d.obs,
       pragas: "Limpeza e desinfecção de reservatório",
       fotos: fotos.map(({ caminho, etapa, legenda }) => ({ caminho, etapa, legenda: legenda || '' })),
     };
@@ -388,11 +381,15 @@ function formCaixa(el, l) {
 
 /* ---------- Impressão ---------- */
 async function imprimirLaudo(l) {
-  if (l.tipo === 'caixa') return imprimirLaudoCaixa(l);
+  imprimir(await documentoLaudo(l));
+}
+// HTML do laudo (o mesmo para imprimir e para o PDF do WhatsApp).
+async function documentoLaudo(l) {
+  if (l.tipo === 'caixa') return documentoCaixa(l);
   const cli = DB.obter('clientes', l.clienteId);
   const cfg = DB.config();
   const recs = l.recomendacoesLista || String(l.recomendacoes || '').split('\n').filter(Boolean);
-  imprimir(`<div class="doc">${cabecalhoDoc()}
+  return `<div class="doc">${cabecalhoDoc()}
     <h2>Certificado de Execução de Serviço nº ${l.numero}</h2>
     <div class="info"><div><b>Data da execução:</b> ${dataBR(l.data)}</div>
       <div><b>Garantia:</b> ${l.garantiaDias ? `${l.garantiaDias} dias (até ${dataBR(somarDias(l.data, l.garantiaDias))})` : '—'}</div></div>
@@ -412,11 +409,11 @@ async function imprimirLaudo(l) {
       <div>${esc(l.responsavel || cfg.responsavelTecnico || 'Responsável técnico')}<br>${esc(l.registroResp || '')}</div>
       <div>${esc(cli ? cli.nome : 'Cliente')}</div>
     </div>
-  </div>`);
+  </div>`;
 }
 
-async function imprimirLaudoCaixa(l) {
-  const cli = DB.obter('clientes', l.clienteId);
+async function documentoCaixa(l) {
+  const cli = DB.obter('clientes', l.clienteId) || {};
   const cfg = DB.config();
   const fotos = l.fotos || [];
   let urls = {};
@@ -424,33 +421,101 @@ async function imprimirLaudoCaixa(l) {
   const total = (l.reservatorios || []).reduce((s, r) => s + (r.quantidade || 1) * (r.capacidade || 0), 0);
   const blocoFotos = (etapa, titulo) => {
     const lista = fotos.filter((f) => f.etapa === etapa && urls[f.caminho]);
-    return `<div class="fotos-laudo-col"><div class="fotos-laudo-tit">${titulo}</div>${lista.length ? lista.map((f) => `<figure>
-      <img src="${esc(urls[f.caminho])}" alt="">${f.legenda ? `<figcaption>${esc(f.legenda)}</figcaption>` : ''}</figure>`).join('') : '<p>—</p>'}</div>`;
+    return `<div class="fotos-laudo-col"><div class="fotos-laudo-tit">${titulo}</div><div class="fotos-laudo-grade">${lista.length ? lista.map((f) => `<figure>
+      <img src="${esc(urls[f.caminho])}" alt="">${f.legenda ? `<figcaption>${esc(f.legenda)}</figcaption>` : ''}</figure>`).join('') : '<p>—</p>'}</div></div>`;
   };
-  imprimir(`<div class="doc">${cabecalhoDoc()}
-    <h2>Laudo de Limpeza e Desinfecção de Reservatório de Água nº ${l.numero}</h2>
-    <div class="info"><div><b>Data da limpeza:</b> ${dataBR(l.data)}</div>
-      <div><b>Validade:</b> ${l.validadeMeses} meses (próxima limpeza até ${dataBR(somarMeses(l.data, Number(l.validadeMeses)))})</div></div>
-    ${blocoCliente(cli)}
-    <h3>Reservatórios</h3>
-    <table><thead><tr><th>Qtd.</th><th>Tipo</th><th>Material</th><th>Capacidade</th><th>Localização</th></tr></thead><tbody>
-      ${(l.reservatorios || []).map((r) => `<tr><td>${r.quantidade || 1}</td><td>${esc(r.tipo)}</td><td>${esc(r.material)}</td>
-        <td>${Number(r.capacidade || 0).toLocaleString('pt-BR')} litros</td><td>${esc(r.local)}</td></tr>`).join('')}
-      <tr><td colspan="3" style="text-align:right"><b>Volume total</b></td><td colspan="2"><b>${total.toLocaleString('pt-BR')} litros</b></td></tr>
-    </tbody></table>
-    ${(l.condicoes || []).length ? `<h3>Condições encontradas</h3><ul>${l.condicoes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
-    <h3>Procedimento realizado</h3><ol>${(l.procedimentos || []).map((p) => `<li>${esc(p)}</li>`).join('')}</ol>
-    <div class="info"><div><b>Produto desinfetante:</b> ${esc(l.desinfetante)}</div><div><b>Solução:</b> ${esc(l.concentracaoSol)}</div>
-      <div><b>Tempo de contato:</b> ${esc(l.tempoContato)}</div></div>
-    ${fotos.length ? `<h3>Registro fotográfico</h3><div class="fotos-laudo">${blocoFotos('antes', 'ANTES')}${blocoFotos('depois', 'DEPOIS')}</div>` : ''}
-    ${(l.recomendacoesLista || []).length ? `<h3>Recomendações</h3><ul>${l.recomendacoesLista.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
-    ${l.obs ? `<h3>Observações</h3><p style="white-space:pre-line">${esc(l.obs)}</p>` : ''}
-    <p class="laudo-conclusao">Certificamos que o(s) reservatório(s) descrito(s) acima foi(ram) limpo(s) e desinfetado(s) por
-      ${esc(cfg.empresa || 'Dedetizadora Berbert')} na data indicada, conforme o procedimento descrito neste laudo.</p>
-    <div class="assinatura">
-      ${l.tecnico ? `<div>${esc(l.tecnico)}<br>Técnico executor</div>` : ''}
-      <div>${esc(l.responsavel || cfg.responsavelTecnico || 'Responsável técnico')}<br>${esc(l.registroResp || 'Responsável técnico')}</div>
-      <div>${esc(cli ? cli.nome : 'Cliente')}<br>Cliente</div>
+  const desinfeccao = [l.desinfetante, l.concentracaoSol, l.tempoContato && 'contato de ' + l.tempoContato].filter(Boolean).join(' · ');
+  return `<div class="doc laudo-caixa">${cabecalhoDoc()}
+    <h2>Laudo de Limpeza e Desinfecção de Reservatório nº ${l.numero}</h2>
+    <div class="info">
+      <div><b>Cliente:</b> ${esc(cli.codigo ? cli.codigo + ' - ' : '')}${esc(cli.nome || '')}</div>
+      <div><b>Cidade:</b> ${esc(cli.cidade || '')}</div>
+      <div style="grid-column:1/-1"><b>Endereço:</b> ${esc([cli.endereco, cli.bairro].filter(Boolean).join(', '))}</div>
+      <div><b>Data da limpeza:</b> ${dataBR(l.data)}</div>
+      <div><b>Próxima limpeza:</b> ${dataBR(somarMeses(l.data, Number(l.validadeMeses) || 6))}</div>
     </div>
-  </div>`);
+    <h3>Reservatórios</h3>
+    <p>${(l.reservatorios || []).map((r) => `${r.quantidade || 1}x ${esc(r.tipo)} de ${Number(r.capacidade || 0).toLocaleString('pt-BR')} L`).join(' · ')}
+      — <b>volume total: ${total.toLocaleString('pt-BR')} litros</b></p>
+    ${desinfeccao ? `<p><b>Desinfecção:</b> ${esc(desinfeccao)}</p>` : ''}
+    ${(l.condicoes || []).length ? `<p><b>Condições encontradas:</b> ${l.condicoes.map(esc).join(', ')}</p>` : ''}
+    ${l.obs ? `<p><b>Observações:</b> ${esc(l.obs)}</p>` : ''}
+    ${fotos.length ? `<h3>Registro fotográfico</h3><div class="fotos-laudo">${blocoFotos('antes', 'ANTES')}${blocoFotos('depois', 'DEPOIS')}</div>` : ''}
+    <p class="laudo-conclusao">Certificamos que o(s) reservatório(s) acima foi(ram) limpo(s) e desinfetado(s) por
+      ${esc(cfg.empresa || 'Dedetizadora Berbert')} na data indicada.${l.responsavel ? ` Responsável técnico: ${esc(l.responsavel)}${l.registroResp ? ' (' + esc(l.registroResp) + ')' : ''}.` : ''}</p>
+  </div>`;
+}
+
+/* ---------- Enviar pelo WhatsApp ---------- */
+// Gera o PDF do laudo. No celular abre o compartilhamento (escolhe o WhatsApp e o PDF vai anexado);
+// no computador baixa o PDF e abre a conversa com o cliente, com a mensagem pronta, para anexar o arquivo.
+let carregandoPdf = null;
+function carregarGeradorPdf() {
+  if (window.html2pdf) return Promise.resolve();
+  carregandoPdf = carregandoPdf || new Promise((ok, falha) => {
+    const s = document.createElement('script');
+    s.src = 'js/vendor/html2pdf.bundle.min.js';
+    s.onload = ok;
+    s.onerror = () => { carregandoPdf = null; falha(new Error('não foi possível carregar o gerador de PDF.')); };
+    document.head.appendChild(s);
+  });
+  return carregandoPdf;
+}
+async function gerarPdfLaudo(l) {
+  await carregarGeradorPdf();
+  const caixa = document.createElement('div');
+  caixa.className = 'pdf-temporario';
+  caixa.innerHTML = await documentoLaudo(l);
+  document.body.appendChild(caixa);
+  try {
+    await Promise.all($$('img', caixa).map((img) => (img.complete ? null : new Promise((ok) => { img.onload = img.onerror = ok; }))));
+    return await window.html2pdf().set({
+      margin: [8, 8, 8, 8], image: { type: 'jpeg', quality: 0.9 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['figure', 'tr', '.info'] },
+    }).from($('.doc', caixa)).outputPdf('blob');
+  } finally {
+    caixa.remove();
+  }
+}
+async function enviarLaudoWhatsApp(l, botao) {
+  const cli = DB.obter('clientes', l.clienteId) || {};
+  const nomeArq = `Laudo ${l.numero} - ${String(cli.nome || 'cliente').replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 60)}.pdf`;
+  const servico = l.tipo === 'caixa' ? "limpeza e desinfecção de caixa d'água" : 'dedetização';
+  const proxima = l.tipo === 'caixa' ? ` Próxima limpeza: ${dataBR(somarMeses(l.data, Number(l.validadeMeses) || 6))}.` : '';
+  const msg = `Olá, ${cli.contato || cli.fantasia || cli.nome || ''}! Segue o laudo nº ${l.numero} da ${servico} realizada em ${dataBR(l.data)}.${proxima} `
+    + `${DB.config().empresa || 'Dedetizadora Berbert'}.`;
+  const texto = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = 'Gerando PDF...';
+  try {
+    const blob = await gerarPdfLaudo(l);
+    const arquivo = new File([blob], nomeArq, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      try {
+        await navigator.share({ files: [arquivo], text: msg, title: nomeArq });
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // a pessoa fechou a tela de compartilhar
+      }
+    }
+    // Computador: baixa o PDF e abre a conversa do cliente com a mensagem.
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nomeArq;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    const fones = extrairTelefones(cli.telefone);
+    const celular = fones.find((f) => f.numero.length === 11) || fones[0];
+    window.open(celular ? linkWhats(celular.numero, msg) : `https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+    avisar(`O PDF "${nomeArq}" foi baixado. No WhatsApp, clique no clipe (anexar) e escolha o arquivo.`, 'ok', 9000);
+  } catch (err) {
+    avisar('Não foi possível gerar o PDF: ' + err.message, 'erro');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = texto;
+  }
 }

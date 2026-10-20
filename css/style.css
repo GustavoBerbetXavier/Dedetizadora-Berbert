@@ -415,10 +415,14 @@ td.num, th.num { text-align: right; }
 .foto-item input { padding: 6px; border: 1px solid var(--borda); border-radius: 6px; font-size: 13px; }
 .fotos-laudo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fotos-laudo-tit { font-weight: bold; text-align: center; background: #eee; padding: 4px; margin-bottom: 6px; }
-.fotos-laudo figure { margin: 0 0 8px; break-inside: avoid; page-break-inside: avoid; }
-.fotos-laudo img { width: 100%; height: 6.5cm; object-fit: cover; border: 1px solid #bbb; display: block; }
+.fotos-laudo-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fotos-laudo figure { margin: 0; break-inside: avoid; page-break-inside: avoid; }
+.fotos-laudo img { width: 100%; height: 3.6cm; object-fit: cover; border: 1px solid #bbb; display: block; }
+.laudo-caixa p { margin: 4px 0; }
 .fotos-laudo figcaption { font-size: 11px; text-align: center; margin-top: 2px; }
 .laudo-conclusao { margin-top: 14px; }
 @media (max-width: 760px) { .reservatorio { grid-template-columns: 1fr 1fr; } .fotos-etapas { grid-template-columns: 1fr; } .produto-laudo { grid-template-columns: 1fr; } }
 .form .opcao-marcar, .opcao-marcar { flex-direction: row; align-items: flex-start; color: var(--texto); }
 .form .opcao-marcar span { flex: 1; }
+.pdf-temporario { position: fixed; left: -10000px; top: 0; width: 794px; background: #fff; }
+.pdf-temporario .doc { max-width: none; padding: 0 4px; }
