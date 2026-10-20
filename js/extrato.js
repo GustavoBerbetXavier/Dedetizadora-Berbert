@@ -65,8 +65,9 @@ function importarExtrato() {
     <div class="importacao">
       <p>Escolha o arquivo do extrato baixado do internet banking: <b>.ofx</b> (recomendado; às vezes aparece como "Money" ou "OFX")
         ou <b>.csv</b>.</p>
-      <p class="ajuda">As <b>entradas</b> viram receitas já recebidas. Se uma entrada tiver o mesmo valor de uma receita em aberto
-        (com vencimento até 10 dias de diferença), ela dá baixa nessa receita. O que já foi importado antes é pulado.</p>
+      <p class="ajuda">As <b>entradas</b> viram receitas recebidas e as <b>saídas</b> viram despesas pagas. Se o valor bater com uma
+        receita ou conta a pagar em aberto (vencimento até 10 dias de diferença), ela recebe baixa em vez de duplicar.
+        O que já foi importado antes é pulado.</p>
       <div class="acoes"><label class="btn">Escolher arquivo do extrato<input type="file" id="arquivo-extrato" accept=".ofx,.csv,.txt,.qfx" hidden></label></div>
       <div id="etapa-extrato"></div>
     </div>`, (raiz) => {
@@ -100,22 +101,38 @@ function clienteDoHistorico(descricao, clientes) {
   return melhor ? melhor.c : null;
 }
 
+// Categoria sugerida para uma saída pelo texto do extrato.
+const CATEGORIAS_SAIDA = [
+  [/tarifa|pacote de servicos|manutencao de conta|iof|juros/, 'Tarifas bancárias'],
+  [/posto|combust|gasolina|diesel|etanol|ipiranga|shell/, 'Combustível'],
+  [/salario|folha|pro.?labore|adiantamento/, 'Salários'],
+  [/aluguel/, 'Aluguel'],
+  [/imposto|darf|\bdas\b|simples nacional|gps|inss|fgts|iptu|ipva/, 'Impostos'],
+  [/mecanic|oficina|pneu|auto pecas/, 'Manutenção de veículo'],
+];
+function categoriaSaida(descricao) {
+  const d = normalizar(descricao);
+  return (CATEGORIAS_SAIDA.find(([re]) => re.test(d)) || [null, 'Outros'])[1];
+}
+
 function etapaExtrato(el, nomeArquivo, transacoes) {
   const lancs = DB.listar('financeiro');
   const jaImportados = new Set(lancs.filter((f) => f.extratoId).map((f) => f.extratoId));
   const chave = (t) => t.id ? 'id:' + t.id : `${t.data}|${t.valor.toFixed(2)}|${normalizar(t.descricao)}`;
   const assinaturas = new Set(lancs.filter((f) => f.extratoChave).map((f) => f.extratoChave));
   const clientes = DB.listar('clientes');
-  const abertas = lancs.filter((f) => f.tipo === 'receita' && !f.pago);
+  const abertas = lancs.filter((f) => !f.pago && (f.tipo === 'receita' || f.tipo === 'despesa'));
   const usadas = new Set();
-  let incluirSaidas = false;
+  let incluirSaidas = true;
 
   const linhas = transacoes.map((t, i) => {
     const k = chave(t);
     const repetida = (t.id && jaImportados.has(t.id)) || assinaturas.has(k);
     let baixa = null;
-    if (t.valor > 0 && !repetida) {
-      const perto = abertas.filter((f) => !usadas.has(f.id) && Math.abs(num(f.valor) - t.valor) < 0.01
+    if (!repetida) {
+      // Entrada procura receita em aberto; saída procura conta a pagar em aberto.
+      const tipo = t.valor > 0 ? 'receita' : 'despesa';
+      const perto = abertas.filter((f) => f.tipo === tipo && !usadas.has(f.id) && Math.abs(num(f.valor) - Math.abs(t.valor)) < 0.01
         && Math.abs((new Date(f.vencimento) - new Date(t.data)) / 864e5) <= 10)
         .sort((a, b) => Math.abs(new Date(a.vencimento) - new Date(t.data)) - Math.abs(new Date(b.vencimento) - new Date(t.data)));
       if (perto[0]) { baixa = perto[0]; usadas.add(baixa.id); }
@@ -139,9 +156,9 @@ function etapaExtrato(el, nomeArquivo, transacoes) {
         <span class="tag verde">${entradas.length} entradas (${moeda(entradas.reduce((s, t) => s + t.valor, 0))})</span>
         <span class="tag vermelho">${saidas.length} saídas (${moeda(saidas.reduce((s, t) => s + t.valor, 0))})</span>
         ${linhas.some((t) => t.repetida) ? `<span class="tag cinza">${linhas.filter((t) => t.repetida).length} já importadas antes</span>` : ''}
-        ${linhas.some((t) => t.baixa) ? `<span class="tag azul">${linhas.filter((t) => t.baixa).length} dão baixa em receitas em aberto</span>` : ''}
+        ${linhas.some((t) => t.baixa) ? `<span class="tag azul">${linhas.filter((t) => t.baixa).length} dão baixa em contas em aberto</span>` : ''}
       </div>
-      <label class="check-linha"><input type="checkbox" id="ext-saidas" ${incluirSaidas ? 'checked' : ''}> Lançar também as saídas como despesas pagas</label>
+      <label class="check-linha"><input type="checkbox" id="ext-saidas" ${incluirSaidas ? 'checked' : ''}> Lançar as saídas como despesas pagas</label>
       <div class="tabela-wrap itens-import"><table><thead><tr><th><input type="checkbox" id="ext-todas" checked title="Marcar todas"></th><th>Data</th><th>Histórico</th>
         <th class="num">Valor</th><th>O que vai acontecer</th><th>Categoria</th></tr></thead><tbody>
         ${visiveis.map((t) => `<tr class="${t.repetida ? 'inativo' : ''}">
@@ -151,7 +168,7 @@ function etapaExtrato(el, nomeArquivo, transacoes) {
           <td>${t.repetida ? '<span class="tag cinza">Já importada</span>'
             : t.baixa ? `<span class="tag azul">Dar baixa</span><div class="ajuda">${esc(t.baixa.descricao)} · venc. ${dataBR(t.baixa.vencimento)}</div>`
             : `<span class="tag ${t.valor > 0 ? 'verde' : 'vermelho'}">Nova ${t.valor > 0 ? 'receita' : 'despesa'}</span>`}</td>
-          <td>${t.baixa ? '' : `<input data-cat="${t.i}" list="ext-cats-${t.valor > 0 ? 'r' : 'd'}" value="${t.valor > 0 ? (t.cliente ? 'Serviços' : 'Entradas do banco') : 'Outros'}">`}</td></tr>`).join('')}
+          <td>${t.baixa ? '' : `<input data-cat="${t.i}" list="ext-cats-${t.valor > 0 ? 'r' : 'd'}" value="${t.valor > 0 ? (t.cliente ? 'Serviços' : 'Entradas do banco') : categoriaSaida(t.descricao)}">`}</td></tr>`).join('')}
       </tbody></table></div>
       <datalist id="ext-cats-r"><option value="Serviços"><option value="Contrato mensal"><option value="Entradas do banco"><option value="Outros"></datalist>
       <datalist id="ext-cats-d"><option value="Produtos químicos"><option value="Combustível"><option value="Salários"><option value="Equipamentos">

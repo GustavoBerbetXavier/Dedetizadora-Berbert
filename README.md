@@ -23,8 +23,9 @@ dados na nuvem (Supabase), com login para cada funcionário.
     encontradas, procedimento, desinfetante, validade e **fotos do antes e do depois** (pelo celular ou
     computador). Imprime ou salva em PDF com as fotos. **Requer rodar `supabase/fotos.sql` uma vez.**
 - **Financeiro**: receitas e despesas por mês, contas pagas, em aberto e vencidas. **Importar extrato**:
-  envie o extrato do banco (.ofx ou .csv) e as entradas viram receitas recebidas; se o valor bater com uma
-  receita em aberto, ela recebe baixa. Reimportar o mesmo extrato não duplica. Saídas são opcionais.
+  envie o extrato do banco (.ofx ou .csv): as entradas viram receitas recebidas e as saídas despesas pagas
+  (com categoria sugerida); se o valor bater com uma receita ou conta a pagar em aberto, ela recebe baixa.
+  Reimportar o mesmo extrato não duplica.
 - **Ligações**: vencimentos (quem está para vencer, pelo último serviço ou contrato) e prospecção de
   empresas por cidade e tipo que ainda não são clientes, com ligar, WhatsApp e registro do resultado.
 - **Configurações**: dados da empresa usados nos documentos e backup dos dados.
