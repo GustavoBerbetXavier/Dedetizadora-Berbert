@@ -14,6 +14,7 @@ const DB = (() => {
     ['laudos', 'Laudos'],
     ['financeiro', 'Financeiro'],
     ['ligacoes', 'Ligações'],
+    ['conversas', 'Conversas'],
   ];
 
   let sb = null;
@@ -23,6 +24,7 @@ const DB = (() => {
   let indices = {}; // coleção -> Map(id -> registro), para achar um registro sem percorrer a lista
   let config = {};
   let catalogos = { servicos: [], colaboradores: [], produtos: [] };
+  let robo = {}; // configuração do robô do WhatsApp/Instagram (config 'robo')
   let fila = Promise.resolve();
   let aoErro = (msg) => alert(msg);
   let ultimaCarga = 0;
@@ -59,6 +61,21 @@ const DB = (() => {
     if (/row-level security|permission denied|Sem permissão/i.test(m)) return 'Você não tem permissão para esta ação.';
     if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão com a internet.';
     return m;
+  }
+  // Tabela que ainda não foi criada no banco (arquivo .sql que falta rodar).
+  function semTabela(error) {
+    return error && (error.code === '42P01' || error.code === 'PGRST205' || /does not exist|could not find the table/i.test(error.message || ''));
+  }
+  // Erro devolvido pela função "robo" do Supabase (a mensagem vem no corpo da resposta).
+  async function erroFuncao(error) {
+    try {
+      const j = await error.context.json();
+      if (j && j.erro) return j.erro;
+    } catch { /* sem corpo */ }
+    if (/not found|404|Failed to send|fetch/i.test(error.message || '')) {
+      return 'a função "robo" ainda não foi publicada no Supabase (veja o passo a passo no README).';
+    }
+    return traduzirErro(error);
   }
   function pode(modulo) {
     if (!perfil || !perfil.ativo) return false;
@@ -121,13 +138,14 @@ const DB = (() => {
       }
       novos[col] = linhas.map((l) => ({ ...l.dados, id: l.id }));
     }));
-    const { data: cfgs, error } = await sb.from('config').select('chave, valor').in('chave', ['empresa', 'catalogos']);
+    const { data: cfgs, error } = await sb.from('config').select('chave, valor').in('chave', ['empresa', 'catalogos', 'robo']);
     if (error) throw error;
     const cfgPor = Object.fromEntries((cfgs || []).map((x) => [x.chave, x.valor]));
     dados = novos;
     indices = {};
     config = cfgPor.empresa || {};
     catalogos = { servicos: [], colaboradores: [], produtos: [], ...(cfgPor.catalogos || {}) };
+    robo = cfgPor.robo || {};
     ultimaCarga = Date.now();
   }
 
@@ -158,6 +176,7 @@ const DB = (() => {
       dados = vazio();
       indices = {};
       config = {};
+      robo = {};
       catalogos = { servicos: [], colaboradores: [], produtos: [] };
     },
     async alterarMinhaSenha(senha) {
@@ -291,6 +310,47 @@ const DB = (() => {
       const { error } = await sb.from('config').upsert({ chave: 'empresa', valor: novo });
       if (error) throw new Error(traduzirErro(error));
       config = novo;
+    },
+
+    /* ---------- Conversas do WhatsApp e Instagram (supabase/robo.sql e supabase/functions/robo) ---------- */
+    async listarConversas() {
+      const { data, error } = await sb.from('conversas').select('*').order('ultima_em', { ascending: false }).limit(500);
+      if (semTabela(error)) throw Object.assign(new Error('sem_tabela'), { semTabela: true });
+      if (error) throw new Error(traduzirErro(error));
+      return data || [];
+    },
+    // As últimas 300 mensagens da conversa, da mais antiga para a mais nova.
+    async mensagensDa(conversaId) {
+      const { data, error } = await sb.from('mensagens').select('*').eq('conversa_id', conversaId).order('id', { ascending: false }).limit(300);
+      if (error) throw new Error(traduzirErro(error));
+      return (data || []).reverse();
+    },
+    async contarConversasEsperando() {
+      const { count, error } = await sb.from('conversas').select('id', { count: 'exact', head: true }).eq('atendimento', 'humano').gt('nao_lidas', 0);
+      if (error) throw new Error(traduzirErro(error));
+      return count || 0;
+    },
+    async atualizarConversa(id, campos) {
+      const { error } = await sb.from('conversas').update(campos).eq('id', id);
+      if (error) throw new Error(traduzirErro(error));
+    },
+    // A mensagem sai pela função "robo", que guarda as chaves da Meta.
+    async enviarMensagem(conversaId, texto) {
+      const { data, error } = await sb.functions.invoke('robo', { body: { acao: 'enviar', conversa_id: conversaId, texto } });
+      if (error) throw new Error(await erroFuncao(error));
+      return data;
+    },
+    async statusRobo() {
+      const { data, error } = await sb.functions.invoke('robo', { body: { acao: 'status' } });
+      if (error) throw new Error(await erroFuncao(error));
+      return data;
+    },
+    roboConfig: () => ({ ...robo }),
+    async salvarRoboConfig(cfg) {
+      const novo = { ...robo, ...cfg };
+      const { error } = await sb.from('config').upsert({ chave: 'robo', valor: novo });
+      if (error) throw new Error(traduzirErro(error));
+      robo = novo;
     },
 
     /* ---------- Cadastros: serviços, colaboradores e produtos ---------- */

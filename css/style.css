@@ -430,3 +430,54 @@ td.num, th.num { text-align: right; }
 .menu a.link-externo .icone { color: #1b5580; }
 .menu a.link-externo .seta-ext { margin-left: auto; width: 15px; height: 15px; }
 .menu a.link-externo span { white-space: nowrap; }
+
+/* Conversas (WhatsApp e Instagram) */
+.tag.roxo { background: #efe3f7; color: #6a2c91; }
+.menu .selo { margin-left: auto; background: var(--marca-laranja); color: #fff; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 1px 7px; }
+.conversas { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.cv-lista { padding: 0; overflow: hidden; margin: 0; }
+.cv-lista-itens { max-height: calc(100vh - 230px); overflow-y: auto; }
+.cv-item { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--borda);
+  border-left: 4px solid transparent; padding: 10px 12px; cursor: pointer; font: inherit; color: var(--texto); }
+.cv-item:hover { background: var(--fundo); }
+.cv-item.ativo { background: #eef5e3; border-left-color: var(--marca-laranja); }
+.cv-item-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
+.cv-item-topo b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.cv-item-topo small { color: var(--suave); font-size: 12px; flex-shrink: 0; }
+.cv-previa { color: var(--suave); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-nao-lidas { background: var(--marca-laranja); color: #fff; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 1px 7px; }
+.cv-chat { padding: 0; margin: 0; display: flex; flex-direction: column; height: calc(100vh - 180px); min-height: 420px; overflow: hidden; }
+.cv-escolha { margin: auto; }
+.cv-chat-topo { padding: 10px 14px; border-bottom: 1px solid var(--borda); display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+.cv-quem { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cv-quem > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cv-quem small { color: var(--suave); font-size: 12px; }
+.cv-voltar { display: none; font-size: 18px; line-height: 1; }
+.cv-msgs { flex: 1; overflow-y: auto; padding: 14px; background: #f7f8f5; display: flex; flex-direction: column; gap: 8px; }
+.cv-msg { max-width: 78%; padding: 8px 11px; border-radius: 10px; background: #fff; border: 1px solid var(--borda); white-space: pre-wrap;
+  overflow-wrap: anywhere; font-size: 14px; align-self: flex-start; }
+.cv-msg.saida { align-self: flex-end; background: #e3f2d5; border-color: #cfe5bb; }
+.cv-msg.erro { background: #fdecea; border-color: #f3c3bd; }
+.cv-msg-info { display: block; font-size: 11px; color: var(--suave); margin-top: 4px; text-align: right; white-space: normal; }
+.cv-enviar { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); align-items: flex-end; }
+.cv-enviar textarea { flex: 1; resize: vertical; min-height: 44px; max-height: 160px; padding: 10px; border: 1px solid var(--borda); border-radius: 8px;
+  font: inherit; font-size: 14px; }
+.cv-dica { padding: 0 12px 8px; font-size: 12px; color: var(--suave); }
+.cv-aviso { padding: 10px 14px; font-size: 13px; background: #fff8ef; border-top: 1px solid var(--borda); color: #8a5a06; }
+.rotulo-campo { display: block; font-size: 13px; color: var(--suave); margin-bottom: 4px; }
+.dias-robo { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+@media (max-width: 800px) {
+  .conversas { grid-template-columns: 1fr; }
+  .conversas.com-aberta .cv-lista, .conversas:not(.com-aberta) .cv-chat { display: none; }
+  .cv-voltar { display: inline-block; }
+  .cv-lista-itens { max-height: none; }
+  .cv-chat { height: calc(100vh - 150px); }
+  .cv-msg { max-width: 90%; }
+}
+.cv-opcoes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; white-space: normal; }
+.cv-opcoes span { background: #fff; border: 1px solid #cfe5bb; color: var(--primaria-escura); border-radius: 14px; padding: 2px 9px; font-size: 12px; }
+@media (max-width: 800px) {
+  /* Com uma conversa aberta, o chat ocupa a tela toda (sem o título e os filtros). */
+  main:has(.conversas.com-aberta) > .cabecalho, main:has(.conversas.com-aberta) > #cv-filtros { display: none; }
+  .conversas.com-aberta .cv-chat { height: calc(100vh - 84px); height: calc(100dvh - 84px); min-height: 0; }
+}

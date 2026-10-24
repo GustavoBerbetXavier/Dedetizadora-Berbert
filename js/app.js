@@ -1,6 +1,6 @@
 // Sistema de gestão - Berbert Pest Control
-// Módulos: Painel, Clientes, Agenda, Orçamentos, Laudos, Financeiro,
-// Funcionários e Configurações. O acesso de cada funcionário é definido
+// Módulos: Painel, Clientes, Agenda, Orçamentos, Laudos, Financeiro, Ligações,
+// Conversas (WhatsApp e Instagram), Funcionários e Configurações. O acesso de cada funcionário é definido
 // pelo administrador e verificado também pelo banco de dados.
 
 /* ---------- Utilitários ---------- */
@@ -166,6 +166,7 @@ const ICONES = {
   config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
   ligacoes: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
+  conversas: '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/>',
   cadastros: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/>',
   sino: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   conta: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
@@ -272,6 +273,7 @@ const ROTAS = [
   { rota: 'laudo', titulo: 'Laudo', modulo: 'laudos', fn: paginaLaudo, foraDoMenu: true, menu: 'laudos' },
   { rota: 'financeiro', titulo: 'Financeiro', modulo: 'financeiro', fn: financeiro },
   { rota: 'ligacoes', titulo: 'Ligações', modulo: 'ligacoes', fn: ligacoes },
+  { rota: 'conversas', titulo: 'Conversas', modulo: 'conversas', fn: conversas },
   // Página de uma ordem/orçamento: 'orcamento/<id>' (ou 'orcamento/novo').
   { rota: 'orcamento', titulo: 'Ordem', modulo: 'orcamentos', fn: paginaOrcamento, foraDoMenu: true, menu: 'orcamentos' },
   { rota: 'cadastros', titulo: 'Cadastros', modulo: 'admin', fn: cadastros },
@@ -506,7 +508,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-20.5';
+const VERSAO_APP = '2026-10-24.1';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -524,8 +526,8 @@ async function atualizarDados() {
   const rota = rotaAtual();
   try {
     await DB.carregar();
-    // Na página de um cliente não redesenha, para não perder o que estiver sendo digitado.
-    if (rota === rotaAtual() && $('#modal').hidden && !/^(cliente|orcamento)\//.test(rota)) render();
+    // Na página de um cliente (ou nas Conversas) não redesenha, para não perder o que estiver sendo digitado.
+    if (rota === rotaAtual() && $('#modal').hidden && !/^(cliente\/|orcamento\/|conversas$)/.test(rota)) render();
   } catch (e) {
     avisar('Não foi possível atualizar os dados: ' + DB.traduzirErro(e), 'erro');
   }
@@ -2717,6 +2719,7 @@ function configuracoes(el) {
           <textarea name="msgProspeccao" rows="3">${esc(c.msgProspeccao || MSG_PROSPECCAO)}</textarea></label>
         <div class="form-acoes"><button class="btn" id="salvar-lig">Salvar</button></div>
       </form></div>
+    ${cartaoConfigRobo()}
     <div class="cartao"><h3>Backup dos dados</h3>
       <p class="ajuda">Os dados ficam guardados no banco de dados na nuvem. Mesmo assim, é bom baixar uma cópia de vez em quando.
         A restauração também serve para importar os dados da versão anterior do sistema (que guardava no navegador).</p>
@@ -2740,6 +2743,7 @@ function configuracoes(el) {
       avisar('Configurações das ligações salvas.');
     });
   });
+  ligarConfigRobo(el);
   $('#exportar', el).addEventListener('click', baixarBackup);
   $('#importar', el).addEventListener('change', async (e) => {
     const arq = e.target.files[0];
@@ -2783,6 +2787,7 @@ async function entrarNoApp(perfil) {
   mostrarTela('app');
   history.replaceState({ rota: rotaAtiva }, '', location.pathname + location.search);
   render();
+  atualizarSeloConversas();
 }
 
 $('#form-login').addEventListener('submit', async (e) => {

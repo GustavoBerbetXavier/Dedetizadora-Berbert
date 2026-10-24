@@ -1,7 +1,7 @@
 {
   "name": "Berbert Pest Control",
   "short_name": "Berbert",
-  "description": "Gestão de clientes, agenda, orçamentos, laudos e financeiro",
+  "description": "Gestão de clientes, agenda, orçamentos, laudos, financeiro e conversas",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",

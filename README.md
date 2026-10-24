@@ -28,7 +28,13 @@ dados na nuvem (Supabase), com login para cada funcionário.
   Reimportar o mesmo extrato não duplica.
 - **Ligações**: vencimentos (quem está para vencer, pelo último serviço ou contrato) e prospecção de
   empresas por cidade e tipo que ainda não são clientes, com ligar, WhatsApp e registro do resultado.
-- **Configurações**: dados da empresa usados nos documentos e backup dos dados.
+- **Conversas (robô do WhatsApp e Instagram)**: um robô de atendimento próprio, no estilo do ManyChat, que usa as
+  APIs oficiais e gratuitas da Meta. Ele responde sozinho com um menu (**Agendar serviço**, **Pedir orçamento**,
+  **Falar com atendente**), faz o agendamento completo pelo chat (serviço, nome, endereço, dia e período, só
+  oferecendo dias com vaga) e já cria o **cliente** e o **agendamento na Agenda**. Quando o cliente pede atendente
+  (ou o robô não entende), a conversa vai para **Esperando equipe** e o funcionário responde pela tela Conversas.
+  **Requer a configuração descrita em "Robô do WhatsApp e Instagram", mais abaixo.**
+- **Configurações**: dados da empresa usados nos documentos, textos e horários do robô e backup dos dados.
 
 ## Como as permissões funcionam
 
@@ -142,10 +148,92 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
     pelo mapa gratuito OpenStreetMap (pode falhar ou vir incompleta).
   - Prazos e mensagens podem ser mudados em **Configurações**. **Requer rodar
     `supabase/ligacoes.sql` uma vez no SQL Editor do Supabase.**
+- **Conversas**: o número no menu mostra quantas conversas estão esperando a equipe. Abra a conversa, leia o que o
+  robô já perguntou e responda. Ao responder (ou em **Assumir conversa**) o robô para de falar naquela conversa.
+  Terminou? **Encerrar atendimento**: se o cliente escrever de novo, o robô volta a atender. **Vincular cliente** liga
+  a conversa a um cadastro (pelo WhatsApp o robô já tenta achar sozinho pelo telefone). Pela regra da Meta, a empresa
+  só pode escrever até **24 horas** depois da última mensagem do cliente.
 - **Gerar PDF**: clique em **Imprimir / PDF** e escolha **"Salvar como PDF"**.
 - **Dados da versão anterior** (que ficavam no navegador): na versão antiga, use
   "Baixar backup". Depois, na versão nova, vá em
   **Configurações → Restaurar / importar backup**.
+
+## Robô do WhatsApp e Instagram (configuração, uma vez)
+
+O robô roda no próprio Supabase (uma "Edge Function") e conversa com a Meta pelas APIs oficiais. Não tem
+mensalidade: responder quem escreveu para a empresa é gratuito no WhatsApp (dentro de 24 horas) e no Instagram, e o
+plano grátis do Supabase cobre 500 mil chamadas por mês. **Não use** programas que imitam o WhatsApp Web (Baileys,
+Evolution API, whatsapp-web.js): eles violam as regras do WhatsApp e o número pode ser banido.
+
+### 1. Banco de dados e permissão
+
+1. No Supabase, **SQL Editor → New query**, cole o arquivo [`supabase/robo.sql`](supabase/robo.sql) e clique em **Run**.
+2. No sistema, em **Funcionários → Editar acesso**, marque **Conversas** para quem vai atender.
+
+### 2. Publicar o robô no Supabase
+
+1. No Supabase, abra **Edge Functions → Deploy a new function → Via Editor**.
+2. Dê o nome **`robo`** (exatamente assim), apague o exemplo, cole todo o arquivo
+   [`supabase/functions/robo/index.ts`](supabase/functions/robo/index.ts) e clique em **Deploy**.
+3. Na página da função, em **Details** (ou Settings), **desative "Enforce JWT verification" / "Verify JWT"** e salve.
+   A Meta não manda login do Supabase; o robô confere sozinho a assinatura da Meta e o login dos funcionários.
+4. O endereço do robô (o "webhook") é: `https://<seu-projeto>.supabase.co/functions/v1/robo`
+   (aparece também em **Configurações → Verificar conexão com a Meta**).
+
+Quem usa o programa de linha de comando do Supabase pode publicar com
+`supabase functions deploy robo --no-verify-jwt`.
+
+### 3. Criar o app na Meta
+
+1. Entre em <https://developers.facebook.com>, **Meus apps → Criar app**, escolha o tipo **Empresa (Business)** e ligue
+   ao portfólio (Gerenciador de Negócios) da empresa.
+2. Em **Configurações do app → Básico**, copie a **Chave secreta do app**. Preencha também a URL da política de
+   privacidade (é exigida para publicar o app).
+3. Invente uma senha qualquer para o webhook (ex.: `berbert-robo-2026`): ela é o **META_VERIFY_TOKEN**.
+
+### 4. WhatsApp
+
+1. No app, adicione o produto **WhatsApp**. Em **WhatsApp → Configuração da API**, adicione e verifique o número da
+   empresa. Use um número que **não** esteja no aplicativo WhatsApp do celular (ou use a opção de "coexistência" com o
+   WhatsApp Business, se a Meta oferecer para o seu número). Copie a **Identificação do número de telefone**.
+2. Token permanente: em **business.facebook.com → Configurações do negócio → Usuários do sistema**, crie um usuário
+   do sistema administrador, dê a ele acesso ao app e à conta do WhatsApp e clique em **Gerar token** com as permissões
+   `whatsapp_business_messaging` e `whatsapp_business_management` e validade **Nunca**.
+3. Em **WhatsApp → Configuração → Webhook**, coloque o endereço do robô e a senha do webhook, clique em
+   **Verificar e salvar** e, nos campos do webhook, **assine `messages`**.
+
+### 5. Instagram
+
+1. A conta do Instagram precisa ser **profissional** (Empresa ou Criador de conteúdo). No aplicativo do Instagram, em
+   **Configurações → Mensagens e respostas a stories → Ferramentas conectadas**, ative **Permitir acesso às mensagens**.
+2. No app da Meta, adicione o produto **Instagram → Configuração da API com login do Instagram**. Adicione a conta,
+   clique em **Gerar token** (é o **INSTAGRAM_TOKEN**) e copie a **Chave secreta do app do Instagram**.
+3. Em **Configurar webhooks**, coloque o mesmo endereço e senha, verifique e **assine `messages`**.
+4. Esse token vale **60 dias**: anote para gerar um novo antes de vencer e trocar no Secret do Supabase.
+
+### 6. Guardar as chaves no Supabase
+
+Em **Edge Functions → Secrets**, adicione (cada uma com o valor copiado acima):
+
+| Nome | Valor |
+|---|---|
+| `META_VERIFY_TOKEN` | a senha inventada para o webhook |
+| `META_APP_SECRET` | a chave secreta do app |
+| `WHATSAPP_TOKEN` | o token permanente do usuário do sistema |
+| `WHATSAPP_PHONE_ID` | a identificação do número de telefone |
+| `INSTAGRAM_TOKEN` | o token do Instagram |
+| `INSTAGRAM_APP_SECRET` | a chave secreta do app do Instagram |
+
+As chaves ficam só no Supabase, nunca no código do sistema. Depois, em **Configurações → Robô do WhatsApp e
+Instagram → Verificar conexão com a Meta**, tudo deve aparecer com ✅. Ali também dá para mudar a mensagem de
+boas-vindas, os serviços, os dias e horários de atendimento e quantos agendamentos cabem em cada período.
+
+### 7. Liberar para todos os clientes
+
+Enquanto o app da Meta está **em desenvolvimento**, o robô só responde pessoas cadastradas no app (bom para testar
+com o seu próprio celular). Para atender qualquer cliente, mude o app para **Ativo (Live)**. No Instagram, a Meta
+ainda pede a **análise do app** (App Review) para a permissão `instagram_business_manage_messages` e pode pedir a
+verificação da empresa. O WhatsApp com número próprio funciona com o app ativo.
 
 ## Estrutura
 
@@ -155,8 +243,11 @@ css/style.css         visual
 js/config.js          endereço e chave do Supabase
 js/db.js              login, permissões e acesso ao banco
 js/app.js             telas e regras do sistema
+js/conversas.js       tela Conversas e configurações do robô
 js/vendor/supabase.js biblioteca oficial do Supabase (v2.116.0)
 supabase/schema.sql   tabelas e regras de permissão do banco
+supabase/robo.sql     tabelas das conversas do WhatsApp e Instagram
+supabase/functions/robo/index.ts  robô de atendimento (Edge Function do Supabase)
 img/                  logo e ícones
 sw.js, manifest.json  instalação como aplicativo
 ```
