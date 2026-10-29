@@ -506,7 +506,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-29.3';
+const VERSAO_APP = '2026-10-29.4';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -549,10 +549,10 @@ $('#menu-btn').addEventListener('click', () => $('#menu').classList.toggle('aber
 
 /* ---------- Status / tags ---------- */
 const STATUS_AG = [['agendado', 'Agendado'], ['concluido', 'Concluído'], ['cancelado', 'Cancelado']];
-const STATUS_ORC = [['pendente', 'Pendente'], ['em_execucao', 'Em Execução'], ['executado', 'Executado'], ['finalizado', 'Finalizado'], ['cancelado', 'Cancelado']];
-// Situações usadas antes no app, convertidas para as atuais.
-const STATUS_ORC_ANTIGO = { aprovado: 'em_execucao', recusado: 'cancelado' };
-const statusOrc = (o) => STATUS_ORC_ANTIGO[o.status] || o.status || 'pendente';
+const STATUS_ORC = [['em_execucao', 'Em Execução'], ['finalizado', 'Finalizado'], ['cancelado', 'Cancelado']];
+// Situações usadas antes no app, convertidas para as atuais (Pendente e Executado foram retirados).
+const STATUS_ORC_ANTIGO = { aprovado: 'em_execucao', pendente: 'em_execucao', executado: 'finalizado', recusado: 'cancelado' };
+const statusOrc = (o) => STATUS_ORC_ANTIGO[o.status] || o.status || 'em_execucao';
 const COR_STATUS = { agendado: 'azul', concluido: 'verde', cancelado: 'cinza', pendente: 'amarelo', em_execucao: 'azul', executado: 'laranja', finalizado: 'verde' };
 function tag(status, lista) {
   const r = (lista.find(([v]) => v === status) || [status, status])[1];
@@ -578,12 +578,12 @@ function painel(el) {
   const vencidas = fin.filter((f) => !f.pago && f.vencimento && f.vencimento < hoje);
   const saldoMes = fin.filter((f) => f.pago && (f.dataPagamento || f.vencimento || '').startsWith(mes))
     .reduce((s, f) => s + (f.tipo === 'receita' ? 1 : -1) * num(f.valor), 0);
-  const orcPend = DB.listar('orcamentos').filter((o) => statusOrc(o) === 'pendente').length;
+  const orcPend = DB.listar('orcamentos').filter((o) => statusOrc(o) === 'em_execucao').length;
 
   const kpis = [];
   if (verAgenda) kpis.push(['Serviços hoje', agHoje.length]);
   kpis.push(['Clientes cadastrados', DB.listar('clientes').length]);
-  if (DB.pode('orcamentos')) kpis.push(['Ordens de serviço pendentes', orcPend]);
+  if (DB.pode('orcamentos')) kpis.push(['Ordens de serviço em execução', orcPend]);
   if (verFin) {
     kpis.push(['A receber', moeda(aReceber)]);
     kpis.push(['Saldo do mês (pago)', `<span style="color:${saldoMes < 0 ? 'var(--vermelho)' : 'inherit'}">${moeda(saldoMes)}</span>`]);
@@ -1563,7 +1563,7 @@ function totalOrcamento(o) {
 // Filtro, busca e página da lista de orçamentos ficam guardados ao voltar à tela.
 const estadoOrc = carregarEstado('orcamentos', { pagina: 1, filtro: 'geral', numero: '', cliente: '' });
 const FILTROS_ORC = [['geral', 'Geral'], ['numero', 'Por Número'], ['cancelado', 'Cancelado'], ['finalizado', 'Finalizado'],
-  ['executado', 'Executado'], ['em_execucao', 'Em Execução'], ['pendente', 'Pendente']];
+  ['em_execucao', 'Em Execução']];
 
 function orcamentos(el) {
   const agendar = DB.pode('agenda');
@@ -1617,7 +1617,7 @@ function orcamentos(el) {
         <td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td>
         <td><div class="acoes">
           <button class="btn peq" data-acao="imprimir" data-id="${o.id}">Imprimir FAES</button>
-          ${statusOrc(o) === 'pendente' ? `<button class="btn sec peq" data-acao="aprovar" data-id="${o.id}">${agendar ? 'Aprovar e agendar' : 'Aprovar'}</button>` : ''}
+          ${agendar && statusOrc(o) === 'em_execucao' ? `<button class="btn sec peq" data-acao="agendar" data-id="${o.id}">Agendar</button>` : ''}
           <button class="btn sec peq" data-acao="editar" data-id="${o.id}">Editar</button>
           <button class="btn sec peq" data-acao="excluir" data-id="${o.id}">Excluir</button>
         </div></td></tr>`;
@@ -1654,9 +1654,7 @@ function orcamentos(el) {
     const o = DB.obter('orcamentos', b.dataset.id);
     if (b.dataset.acao === 'imprimir') imprimirFAES(o);
     if (b.dataset.acao === 'editar') abrirOrcamento(o.id);
-    if (b.dataset.acao === 'aprovar') {
-      DB.salvarItem('orcamentos', { id: o.id, status: 'em_execucao' });
-      if (!agendar) { render(); return; }
+    if (b.dataset.acao === 'agendar') {
       formAgendamento(null, {
         clienteId: o.clienteId, data: hojeISO(), valor: totalOrcamento(o),
         servico: (o.itens || []).map((i) => i.descricao).join(', '),
@@ -1699,9 +1697,8 @@ function situacaoImportada(v) {
   const s = normalizar(v);
   if (s.startsWith('cancel') || s.startsWith('recus')) return 'cancelado';
   if (s.startsWith('finaliz') || s.startsWith('conclu')) return 'finalizado';
-  if (s.startsWith('executad')) return 'executado';
-  if (s.includes('execucao') || s.includes('andamento') || s.startsWith('aprovad')) return 'em_execucao';
-  return 'pendente';
+  if (s.startsWith('executad')) return 'finalizado';
+  return 'em_execucao';
 }
 
 function importarOrcamentos() {
@@ -1870,7 +1867,7 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
       </div>` : ''}
       ${amostra.length ? `<b class="rotulo-previa">Últimos novos:</b>
       <div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Cliente</th><th>Vendedor</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>
-        ${amostra.map((o) => `<tr><td>${o.numero}</td><td>${o.data ? dataBR(o.data) : '—'}</td><td>${esc(nomeDe(o))}</td><td>${esc(o.vendedor || '')}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(o.status, STATUS_ORC)}</td></tr>`).join('')}
+        ${amostra.map((o) => `<tr><td>${o.numero}</td><td>${o.data ? dataBR(o.data) : '—'}</td><td>${esc(nomeDe(o))}</td><td>${esc(o.vendedor || '')}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td></tr>`).join('')}
       </tbody></table></div>` : ''}`;
     const botao = $('#confirmar-importacao', el);
     botao.disabled = !n && !m;
@@ -1943,7 +1940,7 @@ function linkTecnico(o) {
 
 function paginaOrcamento(el, id) {
   const novo = id === 'novo';
-  const o = novo ? { data: hojeISO(), dataAvaliacao: hojeISO(), validadeDias: 15, status: 'pendente', itens: [], pagamento: 'PIX, dinheiro ou cartão' }
+  const o = novo ? { data: hojeISO(), dataAvaliacao: hojeISO(), validadeDias: 15, status: 'em_execucao', itens: [], pagamento: 'PIX, dinheiro ou cartão' }
     : DB.obter('orcamentos', id);
   if (!o) {
     el.innerHTML = `<div class="cartao"><p>Ordem não encontrada. Ela pode ter sido excluída.</p>
@@ -2120,7 +2117,7 @@ function painelExecucao(caixa, id) {
       const bytes = new Uint8Array(24);
       crypto.getRandomValues(bytes);
       const token = Array.from(bytes, (v) => v.toString(16).padStart(2, '0')).join('');
-      DB.salvarItem('orcamentos', { id, tokenTecnico: token, ...(statusOrc(o) === 'pendente' ? { status: 'em_execucao' } : {}) });
+      DB.salvarItem('orcamentos', { id, tokenTecnico: token, ...(o.status === 'pendente' ? { status: 'em_execucao' } : {}) });
       desenhar();
       avisar('Link gerado. Copie ou envie pelo WhatsApp.');
     }
