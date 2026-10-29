@@ -506,7 +506,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-29.6';
+const VERSAO_APP = '2026-10-29.7';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -2386,14 +2386,23 @@ function litrosCaixa(descricao) {
   const m = n.match(/(\d+)\s*(l\b|lts?\b|litros?)/);
   return m ? Number(m[1]) : null;
 }
-// Ordem das listas de cadastro: pelo código; as limpezas de caixa d'água ficam juntas, do menor tamanho ao maior,
-// no lugar da primeira delas.
+// Grupos de serviços que aparecem juntos e em sequência: [nome do grupo, posição do item no grupo ou null].
+function grupoServico(descricao) {
+  const litros = litrosCaixa(descricao);
+  if (litros !== null) return ['caixa', litros];
+  const n = normalizar(descricao);
+  if (/barata germanica/.test(n)) { const m = n.match(/(\d+)\s*\W?\s*aplicac/); return ['germanica', m ? Number(m[1]) : 0]; }
+  return [null, 0];
+}
+// Ordem das listas de cadastro: pelo código. As limpezas de caixa d'água (do menor tamanho ao maior) e as
+// dedetizações para barata germânica (da 1ª à 5ª aplicação) ficam juntas, no lugar da primeira de cada grupo.
 function ordenarCadastro(tipo, lista) {
   const cod = (x) => Number(x.codigo) || 0;
   const nome = (x) => String(x.nome || x.descricao || '');
-  const caixas = tipo === 'servicos' ? lista.filter((x) => litrosCaixa(x.descricao) !== null) : [];
-  const ancora = caixas.length ? Math.min(...caixas.map(cod)) : 0;
-  const chave = (x) => (litrosCaixa(tipo === 'servicos' ? x.descricao : '') !== null ? [ancora, 1, litrosCaixa(x.descricao)] : [cod(x), 0, 0]);
+  const grupo = (x) => (tipo === 'servicos' ? grupoServico(x.descricao) : [null, 0]);
+  const ancora = {};
+  lista.forEach((x) => { const [g] = grupo(x); if (g) ancora[g] = Math.min(ancora[g] ?? Infinity, cod(x)); });
+  const chave = (x) => { const [g, pos] = grupo(x); return g ? [ancora[g], 1, pos] : [cod(x), 0, 0]; };
   return lista.slice().sort((a, b) => {
     const ka = chave(a), kb = chave(b);
     return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2] || nome(a).localeCompare(nome(b));
