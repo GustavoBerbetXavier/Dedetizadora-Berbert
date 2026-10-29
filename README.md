@@ -7,14 +7,14 @@ dados na nuvem (Supabase), com login para cada funcionário.
 ## Funcionalidades
 
 - **Login de funcionários** com permissões por área: o administrador escolhe quem
-  vê Clientes, Agenda, Orçamentos, Laudos e Financeiro. Quem tem **acesso total**
+  vê Clientes, Agenda, Ordens de Serviço, Laudos e Financeiro. Quem tem **acesso total**
   vê tudo, inclusive Funcionários e Configurações.
 - **Painel**: serviços do dia, próximos 7 dias e, para quem tem acesso ao
   financeiro, valores a receber, saldo do mês e contas vencidas.
 - **Clientes**: cadastro, busca, botão de WhatsApp e histórico do cliente.
 - **Agenda**: calendário mensal com os agendamentos. De um agendamento dá para
   **gerar o laudo** e **lançar a receita** com um clique.
-- **Orçamentos**: itens, desconto, validade e forma de pagamento. Imprime ou salva
+- **Ordens de Serviço**: itens, desconto, validade e forma de pagamento. Imprime ou salva
   em PDF com a logo da empresa. Ao aprovar, já abre o agendamento.
 - **Laudos / Certificados**, com opções para marcar em vez de digitar:
   - **Certificado de dedetização**: pragas, áreas, método, os 4 venenos da ficha (com antídoto
@@ -36,7 +36,7 @@ dados na nuvem (Supabase), com login para cada funcionário.
 |---|---|
 | Painel | Todos os funcionários liberados |
 | Clientes | Quem tem "Clientes" (os demais só veem o nome do cliente na agenda e nos laudos) |
-| Agenda, Orçamentos, Laudos, Financeiro | Só quem tem a permissão daquela área |
+| Agenda, Ordens de Serviço, Laudos, Financeiro | Só quem tem a permissão daquela área |
 | Funcionários e Configurações | Só administradores (acesso total) |
 
 As regras são aplicadas **dentro do banco de dados** (Row Level Security), e não só
@@ -101,7 +101,7 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
   importado; quem vier sem código recebe um automático, continuando a numeração. Clientes
   novos já vêm com o próximo código. O código aparece na lista, na busca, no histórico e nos
   documentos, e o sistema não deixa dois clientes com o mesmo código.
-- **Importar orçamentos/ordens de uma planilha** (administrador): em **Orçamentos → Importar
+- **Importar orçamentos/ordens de uma planilha** (administrador): em **Ordens de Serviço → Importar
   planilha**. Colunas reconhecidas: número, código do cliente (id - cliente), cliente, emissão,
   valor, situação e vendedor. Cada orçamento é ligado ao cliente pelo código; clientes que não
   existirem são cadastrados. Números que já existem são pulados (pode importar de novo sem
@@ -121,7 +121,7 @@ vê depende do login e das permissões do banco. **Nunca** coloque a chave
 - **Cadastros** (administrador): serviços (código, descrição, valor), colaboradores (código,
   nome, funções, registro no conselho, telefone) e produtos/venenos (grupo, concentração,
   registro, antídoto). Usados na criação das ordens.
-- **Ordem de serviço (FAES) com link para o técnico**: em Orçamentos, **+ Novo** abre a página
+- **Ordem de serviço (FAES) com link para o técnico**: em Ordens de Serviço, **+ Novo** abre a página
   da ordem: cliente, serviços do cadastro e responsáveis (preenchimento, avaliação prévia,
   responsável técnico, controlador de pragas). Na aba **Execução do técnico**, gere o link e envie
   pelo WhatsApp. O técnico abre no celular, sem login, marca produtos (com quantidade), pragas,

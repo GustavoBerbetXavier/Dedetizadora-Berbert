@@ -266,7 +266,7 @@ const ROTAS = [
   // Página de um cliente: 'cliente/<id>' (ou 'cliente/novo'); no menu, acende "Clientes".
   { rota: 'cliente', titulo: 'Cliente', modulo: 'clientes', fn: paginaCliente, foraDoMenu: true, menu: 'clientes' },
   { rota: 'agenda', titulo: 'Agenda', modulo: 'agenda', fn: agenda },
-  { rota: 'orcamentos', titulo: 'Orçamentos', modulo: 'orcamentos', fn: orcamentos },
+  { rota: 'orcamentos', titulo: 'Ordens de Serviço', modulo: 'orcamentos', fn: orcamentos },
   { rota: 'laudos', titulo: 'Laudos', modulo: 'laudos', fn: laudos },
   // Página de um laudo: 'laudo/<id>', 'laudo/novo' (dedetização) ou 'laudo/novo-caixa' (caixa d'água).
   { rota: 'laudo', titulo: 'Laudo', modulo: 'laudos', fn: paginaLaudo, foraDoMenu: true, menu: 'laudos' },
@@ -506,7 +506,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-29.2';
+const VERSAO_APP = '2026-10-29.3';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -583,7 +583,7 @@ function painel(el) {
   const kpis = [];
   if (verAgenda) kpis.push(['Serviços hoje', agHoje.length]);
   kpis.push(['Clientes cadastrados', DB.listar('clientes').length]);
-  if (DB.pode('orcamentos')) kpis.push(['Orçamentos pendentes', orcPend]);
+  if (DB.pode('orcamentos')) kpis.push(['Ordens de serviço pendentes', orcPend]);
   if (verFin) {
     kpis.push(['A receber', moeda(aReceber)]);
     kpis.push(['Saldo do mês (pago)', `<span style="color:${saldoMes < 0 ? 'var(--vermelho)' : 'inherit'}">${moeda(saldoMes)}</span>`]);
@@ -633,7 +633,7 @@ function blocosResumo(hoje, fin, verFin) {
       });
     });
     const top = [...qtd].sort((a, b) => b[1] - a[1]).slice(0, 8);
-    blocos.push(cartao('ranking', 'Serviços que mais saem', `<p class="ajuda">Ranking dos últimos 30 dias (quantidade), pelos orçamentos aprovados ou executados.</p>
+    blocos.push(cartao('ranking', 'Serviços que mais saem', `<p class="ajuda">Ranking dos últimos 30 dias (quantidade), pelas ordens de serviço em execução ou executadas.</p>
       ${top.length ? barras(top.map(([n, q]) => [n, q, q.toLocaleString('pt-BR')]), top[0][1]) : '<div class="vazio">Nenhum serviço no período.</div>'}`));
   }
   if (verFin) {
@@ -879,8 +879,8 @@ function telaRepetidos(pares) {
       Vou <b>manter a cópia com código</b> e apagar a cópia sem código.</p>
     <ul class="lista-ajuda">
       <li>Se a cópia sem código tiver algum dado que falta na outra (bairro, e-mail...), ele é copiado antes de apagar.</li>
-      <li>${ligados ? `${ligados} agendamento(s), orçamento(s), laudo(s) ou lançamento(s) ligados às cópias serão passados para o cliente mantido.`
-        : 'Nenhum agendamento, orçamento, laudo ou lançamento está ligado às cópias.'}</li>
+      <li>${ligados ? `${ligados} agendamento(s), ordem(ns) de serviço, laudo(s) ou lançamento(s) ligados às cópias serão passados para o cliente mantido.`
+        : 'Nenhum agendamento, ordem de serviço, laudo ou lançamento está ligado às cópias.'}</li>
       <li>Clientes que existem só uma vez não são alterados.</li>
     </ul>
     <b class="rotulo-previa">Exemplos:</b>
@@ -1407,8 +1407,8 @@ function historicoClienteHTML(c) {
       <div class="kpi"><div class="rotulo">Em aberto</div><div class="valor">${moeda(aberto)}</div></div>` : ''}
     </div>
     ${DB.pode('agenda') ? `<h3>Agendamentos</h3>${tabelaAgendamentos(ags, false)}` : ''}
-    ${DB.pode('orcamentos') ? `<h3>Orçamentos</h3>${orcs.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
-      ${orcs.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum orçamento.</div>'}` : ''}
+    ${DB.pode('orcamentos') ? `<h3>Ordens de Serviço</h3>${orcs.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
+      ${orcs.map((o) => `<tr><td>${o.numero}</td><td>${dataBR(o.data)}</td><td class="num">${moeda(totalOrcamento(o))}</td><td>${tag(statusOrc(o), STATUS_ORC)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhuma ordem de serviço.</div>'}` : ''}
     ${DB.pode('laudos') ? `<h3>Laudos</h3>${lds.length ? `<table><thead><tr><th>Nº</th><th>Data</th><th>Pragas</th><th>Garantia até</th></tr></thead><tbody>
       ${lds.map((l) => `<tr><td>${l.numero}</td><td>${dataBR(l.data)}</td><td>${esc(l.pragas)}</td><td>${l.garantiaDias ? dataBR(somarDias(l.data, l.garantiaDias)) : '—'}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum laudo.</div>'}` : ''}
   `;
@@ -1571,16 +1571,16 @@ function orcamentos(el) {
   const contagem = { geral: todos.length };
   todos.forEach((o) => { const st = statusOrc(o); contagem[st] = (contagem[st] || 0) + 1; });
   el.innerHTML = `
-    <div class="cabecalho"><h2>Orçamentos e Ordens de Serviço</h2>
+    <div class="cabecalho"><h2>Ordens de Serviço</h2>
       <div class="acoes">
         ${DB.perfil().admin ? '<button class="btn sec perigo-texto" id="excluir-tudo">Excluir tudo</button><button class="btn sec" id="importar-orc">Importar planilha</button>' : ''}
-        <button class="btn" id="novo">+ Novo orçamento</button></div></div>
+        <button class="btn" id="novo">+ Nova Ordem de Serviço</button></div></div>
     <div class="abas" role="tablist">
       ${FILTROS_ORC.map(([v, r]) => `<button class="aba ${estadoOrc.filtro === v ? 'ativa' : ''}" data-filtro="${v}" role="tab">${r}${v === 'numero' ? '' : ` <span class="cont">${(contagem[v] || 0).toLocaleString('pt-BR')}</span>`}</button>`).join('')}
     </div>
     <div class="filtros">
       ${estadoOrc.filtro === 'numero'
-        ? `<label class="filtro-busca">Número do orçamento<input class="busca" id="f-numero" inputmode="numeric" placeholder="Digite o número..." value="${esc(estadoOrc.numero)}"></label>`
+        ? `<label class="filtro-busca">Número da ordem de serviço<input class="busca" id="f-numero" inputmode="numeric" placeholder="Digite o número..." value="${esc(estadoOrc.numero)}"></label>`
         : `<label class="filtro-busca">Cliente<input class="busca" id="f-cliente" placeholder="Buscar por código ou nome do cliente..." value="${esc(estadoOrc.cliente)}"></label>`}
     </div>
     <div class="cartao" style="padding:0"><div id="lista-orc"></div></div>`;
@@ -1607,7 +1607,7 @@ function orcamentos(el) {
     }
     const { itens, html: rodape } = paginar(lista, estadoOrc);
     guardarEstado('orcamentos', estadoOrc);
-    const vazio = estadoOrc.filtro === 'numero' && !digitos(estadoOrc.numero) ? 'Digite o número do orçamento.' : 'Nenhum orçamento encontrado.';
+    const vazio = estadoOrc.filtro === 'numero' && !digitos(estadoOrc.numero) ? 'Digite o número da ordem de serviço.' : 'Nenhuma ordem de serviço encontrada.';
     $('#lista-orc', el).innerHTML = itens.length ? `<div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>Emissão</th><th>Cliente</th><th>Vendedor</th><th class="num">Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>
       ${itens.map((o) => {
         const c = DB.obter('clientes', o.clienteId);
@@ -1660,16 +1660,16 @@ function orcamentos(el) {
       formAgendamento(null, {
         clienteId: o.clienteId, data: hojeISO(), valor: totalOrcamento(o),
         servico: (o.itens || []).map((i) => i.descricao).join(', '),
-        obs: `Referente ao orçamento nº ${o.numero}`,
+        obs: `Referente à ordem de serviço nº ${o.numero}`,
       });
     }
-    if (b.dataset.acao === 'excluir' && confirmar('Excluir este orçamento?')) { DB.remover('orcamentos', o.id); render(); }
+    if (b.dataset.acao === 'excluir' && confirmar('Excluir esta ordem de serviço?')) { DB.remover('orcamentos', o.id); render(); }
   });
 }
 
 /* ---------- Importação de orçamentos por planilha (.csv) ---------- */
 const CAMPOS_IMPORTACAO_ORC = [
-  ['numero', 'Número do orçamento *', ['numero', 'nº', 'n', 'no', 'numero do orcamento', 'numero orcamento', 'orcamento', 'os', 'numero os', 'ordem', 'pedido']],
+  ['numero', 'Número da ordem de serviço *', ['numero', 'nº', 'n', 'no', 'numero do orcamento', 'numero orcamento', 'orcamento', 'os', 'numero os', 'ordem', 'pedido']],
   ['codigoCliente', 'Código do cliente', ['id - cliente', 'id cliente', 'id-cliente', 'codigo cliente', 'codigo do cliente', 'cod cliente', 'cliente id', 'cod']],
   ['cliente', 'Nome do cliente', ['cliente', 'nome', 'nome do cliente', 'razao social', 'nome cliente']],
   ['emissao', 'Emissão (data)', ['emissao', 'data', 'data emissao', 'data de emissao', 'data do orcamento']],
@@ -1705,11 +1705,11 @@ function situacaoImportada(v) {
 }
 
 function importarOrcamentos() {
-  abrirModal('Importar orçamentos de planilha', `
+  abrirModal('Importar ordens de serviço de planilha', `
     <div class="importacao">
-      <p>Escolha o arquivo <b>.csv</b> com os orçamentos/ordens. A primeira linha deve ter os nomes das colunas
+      <p>Escolha o arquivo <b>.csv</b> com as ordens de serviço. A primeira linha deve ter os nomes das colunas
         (por exemplo: numero; id - cliente; cliente; emissao; valor; situacao; vendedor).</p>
-      <p class="ajuda">Cada orçamento é ligado ao cliente pelo <b>código do cliente</b>. Clientes que ainda não existirem
+      <p class="ajuda">Cada ordem de serviço é ligada ao cliente pelo <b>código do cliente</b>. Clientes que ainda não existirem
         no cadastro são criados automaticamente com o código e o nome da planilha.</p>
       <div class="acoes"><label class="btn">Escolher arquivo .csv<input type="file" id="arquivo-csv" accept=".csv,text/csv,.txt" hidden></label></div>
       <div id="etapa-mapa"></div>
@@ -1720,7 +1720,7 @@ function importarOrcamentos() {
       if (!arq) return;
       try {
         const linhas = lerCSV(await lerArquivoTexto(arq));
-        if (linhas.length < 2) throw new Error('O arquivo precisa ter a linha de títulos e pelo menos um orçamento.');
+        if (linhas.length < 2) throw new Error('O arquivo precisa ter a linha de títulos e pelo menos uma ordem de serviço.');
         etapaMapeamentoOrc($('#etapa-mapa', raiz), arq.name, linhas);
       } catch (err) {
         avisar('Não foi possível ler o arquivo: ' + err.message, 'erro');
@@ -1742,7 +1742,7 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
       ${CAMPOS_IMPORTACAO_ORC.map(([k, rotulo]) => `<label>${rotulo}<select data-campo="${k}">${opcoesColunas(mapa[k])}</select></label>`).join('')}
     </div>
     <label class="check-linha"><input type="checkbox" id="op-atualizar" checked>
-      Atualizar os orçamentos que já foram importados antes, quando o arquivo trouxer alterações (cliente, emissão, valor, situação, vendedor)</label>
+      Atualizar as ordens de serviço que já foram importadas antes, quando o arquivo trouxer alterações (cliente, emissão, valor, situação, vendedor)</label>
     <div id="previa"></div>
     <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
       <button type="button" class="btn" id="confirmar-importacao">Importar</button></div>`;
@@ -1846,7 +1846,7 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
         <span class="tag verde">${n.toLocaleString('pt-BR')} novos para importar</span>
         ${m ? `<span class="tag laranja">${m} já importados serão atualizados</span>` : ''}
         ${r.iguais ? `<span class="tag cinza">${r.iguais.toLocaleString('pt-BR')} já importados sem mudanças</span>` : ''}
-        ${r.conflitos.length ? `<span class="tag vermelho">${r.conflitos.length} números em conflito com orçamentos criados no app</span>` : ''}
+        ${r.conflitos.length ? `<span class="tag vermelho">${r.conflitos.length} números em conflito com ordens de serviço criadas no app</span>` : ''}
         ${r.repetidosArquivo ? `<span class="tag amarelo">${r.repetidosArquivo} números repetidos na planilha (pulados)</span>` : ''}
         ${r.semNumero ? `<span class="tag vermelho">${r.semNumero} sem número (pulados)</span>` : ''}
       </div>
@@ -1856,16 +1856,16 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
           <ul>${r.exemplosMudanca.map((x) => `<li>${esc(x)}</li>`).join('')}${m > r.exemplosMudanca.length ? '<li>...</li>' : ''}</ul></li>` : ''}
         ${novosClientes.size ? `<li><b>${novosClientes.size}</b> cliente(s) novo(s) serão cadastrados (não estavam no cadastro).</li>` : ''}
         ${r.divergentes ? `<li class="atencao">${r.divergentes} linha(s) com código de cliente que, no cadastro, pertence a outro nome (ligadas pelo nome ou a um cliente novo).</li>` : ''}
-        ${r.datasInvalidas ? `<li>${r.datasInvalidas} orçamento(s) novo(s) com data de emissão inválida (ficarão sem data).</li>` : ''}
+        ${r.datasInvalidas ? `<li>${r.datasInvalidas} ordem(ns) de serviço nova(s) com data de emissão inválida (ficarão sem data).</li>` : ''}
       </ul>
       ${r.conflitos.length ? `<div class="conflitos">
-        <b>Números em conflito:</b> estes números já são de orçamentos criados no app, mas no arquivo são de outras ordens do sistema antigo.
+        <b>Números em conflito:</b> estes números já são de ordens de serviço criadas no app, mas no arquivo são de outras ordens do sistema antigo.
         <div class="tabela-wrap"><table><thead><tr><th>Nº</th><th>No app (criado aqui)</th><th>No arquivo (sistema antigo)</th><th>Novo nº do app</th></tr></thead><tbody>
           ${r.conflitos.slice(0, 12).map((c) => { const rn = r.renumerar.find((x) => x.id === c.ex.id); return `<tr><td>${c.ex.numero}</td><td>${esc(nomeCliente(c.ex.clienteId))}</td><td>${esc(c.nomeArquivo)}</td><td>${rn ? rn.numero : ''}</td></tr>`; }).join('')}
           ${r.conflitos.length > 12 ? `<tr><td colspan="4">... e mais ${r.conflitos.length - 12}</td></tr>` : ''}
         </tbody></table></div>
         <label class="check-linha"><input type="checkbox" id="op-renumerar" ${renumerar ? 'checked' : ''}>
-          Dar um novo número aos orçamentos criados no app (coluna "Novo nº do app") e importar as ordens do arquivo com o número original</label>
+          Dar um novo número às ordens de serviço criadas no app (coluna "Novo nº do app") e importar as ordens do arquivo com o número original</label>
         <p class="ajuda">Se não marcar, essas ordens do arquivo ficam de fora.</p>
       </div>` : ''}
       ${amostra.length ? `<b class="rotulo-previa">Últimos novos:</b>
@@ -1879,7 +1879,7 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
   el.addEventListener('change', (e) => { if (e.target.matches('[data-campo], #op-atualizar, #op-renumerar')) calcular(); });
   $('[data-cancelar]', el).addEventListener('click', fecharModal);
   $('#confirmar-importacao', el).addEventListener('click', async (e) => {
-    if (mapa.numero === undefined) { avisar('Escolha qual coluna tem o número do orçamento.', 'erro'); return; }
+    if (mapa.numero === undefined) { avisar('Escolha qual coluna tem o número da ordem de serviço.', 'erro'); return; }
     const botao = e.target;
     botao.disabled = true;
     const renumerar = ($('#op-renumerar', el) || {}).checked && r.renumerar.length;
@@ -1906,7 +1906,7 @@ function etapaMapeamentoOrc(el, nomeArquivo, linhas) {
       }
       await DB.ajustarNumeracao(renumerar ? r.maiorFinal : r.maior, 0);
       fecharModal();
-      avisar([r.novos.length ? `${r.novos.length.toLocaleString('pt-BR')} orçamentos importados` : '',
+      avisar([r.novos.length ? `${r.novos.length.toLocaleString('pt-BR')} ordens de serviço importadas` : '',
         r.atualizar.length ? `${r.atualizar.length} atualizados` : '', renumerar ? `${r.renumerar.length} do app renumerados` : '',
         chaves.length ? `${chaves.length} clientes cadastrados` : ''].filter(Boolean).join(', ') + '.');
       render();
@@ -1956,11 +1956,11 @@ function paginaOrcamento(el, id) {
   const semColab = !colaboradoresAtivos().length;
   el.innerHTML = `
     <div class="pagina-topo">
-      <button class="btn sec peq" id="voltar">&lsaquo; Orçamentos</button>
-      <h2>${novo ? 'Nova ordem de serviço / orçamento' : `Nº ${o.numero} — ${esc(nomeCliente(o.clienteId))}`}</h2>
+      <button class="btn sec peq" id="voltar">&lsaquo; Ordens de Serviço</button>
+      <h2>${novo ? 'Nova Ordem de Serviço' : `Nº ${o.numero} — ${esc(nomeCliente(o.clienteId))}`}</h2>
       ${novo ? '' : tag(statusOrc(o), STATUS_ORC)}
       ${novo ? '' : `<div class="acoes" style="margin-left:auto">
-        <button class="btn sec peq" id="imp-orc">Imprimir orçamento</button>
+        <button class="btn sec peq" id="imp-orc">Imprimir Ordem de Serviço</button>
         <button class="btn peq" id="imp-faes">Imprimir FAES / PDF</button></div>`}
     </div>
     <div class="abas" role="tablist">
@@ -1990,7 +1990,7 @@ function paginaOrcamento(el, id) {
         ${campo('Hora de início prevista', 'horaInicio', o.horaInicio, 'time')}
         ${campo('Características das áreas', 'caracteristicas', o.caracteristicas, 'text', 'full placeholder="Ex.: 12 porta iscas, cozinha industrial, depósito..."')}
         ${campo('Observações para o técnico', 'obsTecnico', o.obsTecnico, 'textarea', 'full')}
-        <h3 class="full secao">Orçamento</h3>
+        <h3 class="full secao">Ordem de Serviço</h3>
         ${campo('Vendedor', 'vendedor', o.vendedor, 'text', 'list="vendedores"')}
         ${campo('Validade (dias)', 'validadeDias', o.validadeDias, 'number', 'min="1"')}
         <datalist id="vendedores">${[...new Set(DB.listar('orcamentos').map((x) => x.vendedor).filter(Boolean))].slice(0, 50).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
@@ -2051,7 +2051,7 @@ function paginaOrcamento(el, id) {
   });
   if (novo) return;
   $('#excluir-orc', el).addEventListener('click', () => {
-    if (!confirmar(`Excluir a ordem/orçamento nº ${o.numero}?`)) return;
+    if (!confirmar(`Excluir a ordem de serviço nº ${o.numero}?`)) return;
     DB.remover('orcamentos', o.id);
     avisar('Excluído.');
     irPara('orcamentos', true);
@@ -2154,7 +2154,7 @@ function imprimirOrcamento(o) {
   const cli = DB.obter('clientes', o.clienteId);
   const sub = (o.itens || []).reduce((s, i) => s + num(i.qtd || 1) * num(i.valor), 0);
   imprimir(`<div class="doc">${cabecalhoDoc()}
-    <h2>Orçamento nº ${o.numero}</h2>
+    <h2>Ordem de Serviço nº ${o.numero}</h2>
     <div class="info"><div><b>Emissão:</b> ${o.data ? dataBR(o.data) : '—'}</div><div><b>Válido até:</b> ${o.data ? dataBR(somarDias(o.data, o.validadeDias || 15)) : '—'}</div></div>
     ${blocoCliente(cli)}
     <h3>Serviços</h3>
@@ -2686,18 +2686,19 @@ function formMinhaSenha() {
 function excluirTudo(col) {
   // Serviços e produtos ficam nos cadastros (catálogos), não em tabelas próprias.
   const catalogo = ['servicos', 'produtos'].includes(col);
-  const nomes = { clientes: ['clientes', 'cliente'], orcamentos: ['orçamentos/ordens de serviço', 'orçamento'],
+  const nomes = { clientes: ['clientes', 'cliente'], orcamentos: ['ordens de serviço', 'ordem de serviço', 'todas as', 'excluídas'],
     servicos: ['serviços cadastrados', 'serviço'], produtos: ['produtos cadastrados', 'produto'] }[col];
+  const todos = nomes[2] || 'todos os', excluidos = nomes[3] || 'excluídos';
   const total = catalogo ? DB.catalogo(col).length : DB.listar(col).length;
   if (!total) { avisar(`Não há ${nomes[0]} para excluir.`, 'erro'); return; }
   const PALAVRA = 'EXCLUIR TUDO';
-  abrirModal(`Excluir todos os ${nomes[0]}`, `
+  abrirModal(`Excluir ${todos} ${nomes[0]}`, `
     <div class="alerta-perigo">
       <p><b>Atenção:</b> isto apaga <b>${total.toLocaleString('pt-BR')} ${nomes[0]}</b> do banco de dados, para todos os usuários.
         <b>Não é possível desfazer.</b></p>
-      ${col === 'clientes' ? '<p>Orçamentos, agendamentos, laudos e lançamentos ligados a esses clientes continuam no sistema, mas ficam sem o nome do cliente.</p>'
+      ${col === 'clientes' ? '<p>Ordens de serviço, agendamentos, laudos e lançamentos ligados a esses clientes continuam no sistema, mas ficam sem o nome do cliente.</p>'
         : catalogo ? '<p>As ordens já criadas continuam com o que foi gravado nelas. Se quiser só tirar um item das próximas ordens, prefira "Desativar".</p>'
-        : '<p>A numeração dos próximos orçamentos continua de onde parou (não volta para 1).</p>'}
+        : '<p>A numeração das próximas ordens de serviço continua de onde parou (não volta para 1).</p>'}
     </div>
     <p>1. Antes, baixe uma cópia de segurança: <button type="button" class="btn sec peq" id="ex-backup">Baixar backup</button></p>
     <form class="form" id="form-ex">
@@ -2716,7 +2717,7 @@ function excluirTudo(col) {
       enviando(botao, async () => {
         if (catalogo) await DB.salvarCatalogo(col, []); else await DB.removerTudo(col);
         fecharModal();
-        avisar(`Todos os ${nomes[0]} foram excluídos.`);
+        avisar(`${todos[0].toUpperCase() + todos.slice(1)} ${nomes[0]} foram ${excluidos}.`);
         render();
       });
     });
@@ -2738,7 +2739,7 @@ function configuracoes(el) {
   const c = DB.config();
   el.innerHTML = `
     <div class="cabecalho"><h2>Configurações</h2></div>
-    <div class="cartao"><h3>Dados da empresa (aparecem nos orçamentos e laudos)</h3>
+    <div class="cartao"><h3>Dados da empresa (aparecem nas ordens de serviço e laudos)</h3>
       <form class="form" id="form-cfg">
         ${campo('Nome da empresa', 'empresa', c.empresa || 'Dedetizadora Berbert', 'text', 'full')}
         ${campo('CNPJ', 'cnpj', c.cnpj)}

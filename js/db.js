@@ -10,7 +10,7 @@ const DB = (() => {
   const MODULOS = [
     ['clientes', 'Clientes'],
     ['agenda', 'Agenda'],
-    ['orcamentos', 'Orçamentos'],
+    ['orcamentos', 'Ordens de Serviço'],
     ['laudos', 'Laudos'],
     ['financeiro', 'Financeiro'],
     ['ligacoes', 'Ligações'],
