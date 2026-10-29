@@ -506,7 +506,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-29.5';
+const VERSAO_APP = '2026-10-29.6';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -1949,7 +1949,7 @@ function paginaOrcamento(el, id) {
     return;
   }
   if (novo) abaOrcamento = 'dados';
-  const servicos = DB.catalogo('servicos').filter((x) => x.ativo !== false);
+  const servicos = ordenarCadastro('servicos', DB.catalogo('servicos').filter((x) => x.ativo !== false));
   const semColab = !colaboradoresAtivos().length;
   el.innerHTML = `
     <div class="pagina-topo">
@@ -2337,13 +2337,12 @@ function cadastros(el) {
   const lista = DB.catalogo(abaCadastro);
   el.innerHTML = `
     <div class="cabecalho"><h2>Cadastros</h2><div class="acoes">
-      ${abaCadastro !== 'colaboradores' ? '<button class="btn sec perigo-texto" id="excluir-tudo">Excluir tudo</button><button class="btn sec" id="importar-itens">Importar planilha</button>' : ''}
+      ${abaCadastro !== 'colaboradores' ? '<button class="btn sec perigo-texto" id="excluir-tudo">Excluir tudo</button><button class="btn sec" id="importar-itens">Importar planilha</button><button class="btn sec" id="organizar">Organizar serviços e produtos</button>' : ''}
       <button class="btn" id="novo-item">+ Novo ${def.singular}</button></div></div>
     <p class="ajuda">Serviços e colaboradores usados na criação das ordens de serviço.${abaCadastro === 'produtos' ? ' Os venenos da ordem de serviço (FAES) são sempre os 4 da ficha (Lambida-Cialotrina, Fipronil, Diclovos e Difetialona); este cadastro é só para consulta.' : ''}</p>
     <div class="abas">${Object.entries(DEF_CADASTRO).map(([k, d]) => `<button class="aba ${abaCadastro === k ? 'ativa' : ''}" data-aba="${k}">${d.titulo} <span class="cont">${DB.catalogo(k).length}</span></button>`).join('')}</div>
     <div class="cartao" style="padding:0" id="lista-cad">${lista.length ? `<div class="tabela-wrap"><table><thead><tr>${def.colunas.map(([, r]) => `<th>${r}</th>`).join('')}<th>Situação</th><th>Ações</th></tr></thead><tbody>
-    ${lista.slice().sort((a, b) => (Number(a.codigo) || 0) - (Number(b.codigo) || 0) || String(a.nome || a.descricao || '').localeCompare(String(b.nome || b.descricao || '')))
-      .map((x) => `<tr class="${x.ativo === false ? 'inativo' : ''}">${def.colunas.map(([k, , f]) => `<td>${f ? f(x[k]) : esc(x[k] || '')}</td>`).join('')}
+    ${ordenarCadastro(abaCadastro, lista).map((x) => `<tr class="${x.ativo === false ? 'inativo' : ''}">${def.colunas.map(([k, , f]) => `<td>${f ? f(x[k]) : esc(x[k] || '')}</td>`).join('')}
       <td>${x.ativo === false ? '<span class="tag cinza">Inativo</span>' : '<span class="tag verde">Ativo</span>'}</td>
       <td><div class="acoes"><button class="btn sec peq" data-editar="${x.id}">Editar</button>
         <button class="btn sec peq" data-ativo="${x.id}">${x.ativo === false ? 'Ativar' : 'Desativar'}</button></div></td></tr>`).join('')}
@@ -2358,6 +2357,8 @@ function cadastros(el) {
   $('#novo-item', el).addEventListener('click', () => formCadastro(abaCadastro, null, () => cadastros(el)));
   const imp = $('#importar-itens', el);
   if (imp) imp.addEventListener('click', () => importarItensCadastro(() => cadastros(el)));
+  const org = $('#organizar', el);
+  if (org) org.addEventListener('click', () => organizarCadastros(() => cadastros(el)));
   const exc = $('#excluir-tudo', el);
   if (exc) exc.addEventListener('click', () => excluirTudo(abaCadastro));
   const ex = $('#exemplos', el);
@@ -2375,6 +2376,83 @@ function cadastros(el) {
       await enviando(at, () => DB.salvarCatalogo(abaCadastro, nova));
       cadastros(el);
     }
+  });
+}
+
+// Litros de um serviço de limpeza de caixa d'água ("... 7500L", "... 12000 LITROS"), ou null.
+function litrosCaixa(descricao) {
+  const n = normalizar(descricao);
+  if (!/caixa d\W?\s*agua/.test(n)) return null;
+  const m = n.match(/(\d+)\s*(l\b|lts?\b|litros?)/);
+  return m ? Number(m[1]) : null;
+}
+// Ordem das listas de cadastro: pelo código; as limpezas de caixa d'água ficam juntas, do menor tamanho ao maior,
+// no lugar da primeira delas.
+function ordenarCadastro(tipo, lista) {
+  const cod = (x) => Number(x.codigo) || 0;
+  const nome = (x) => String(x.nome || x.descricao || '');
+  const caixas = tipo === 'servicos' ? lista.filter((x) => litrosCaixa(x.descricao) !== null) : [];
+  const ancora = caixas.length ? Math.min(...caixas.map(cod)) : 0;
+  const chave = (x) => (litrosCaixa(tipo === 'servicos' ? x.descricao : '') !== null ? [ancora, 1, litrosCaixa(x.descricao)] : [cod(x), 0, 0]);
+  return lista.slice().sort((a, b) => {
+    const ka = chave(a), kb = chave(b);
+    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2] || nome(a).localeCompare(nome(b));
+  });
+}
+
+// Revisa os dois cadastros: o que é serviço vai para Serviços, o resto (venenos, iscas, equipamentos) para Produtos.
+function organizarCadastros(aoTerminar) {
+  const itens = [
+    ...DB.catalogo('servicos').map((x) => ({ x, de: 'servicos', nome: x.descricao })),
+    ...DB.catalogo('produtos').map((x) => ({ x, de: 'produtos', nome: x.nome })),
+  ];
+  itens.forEach((i) => (i.para = PALAVRAS_SERVICO.test(normalizar(i.nome)) ? 'servicos' : 'produtos'));
+  const OPCOES = [['servicos', 'Serviço'], ['produtos', 'Produto']];
+  const ordem = (i) => [i.para !== i.de ? 0 : 1, i.de, normalizar(i.nome)].join('|');
+  itens.sort((a, b) => ordem(a).localeCompare(ordem(b)));
+  abrirModal('Organizar serviços e produtos', `
+    <div class="importacao">
+      <p class="ajuda">Confira onde cada item vai ficar. Os que estão no lugar errado aparecem primeiro, marcados como <b>muda</b>.
+        As limpezas de caixa d'água ficam em ordem de tamanho (do menor para o maior).</p>
+      <div class="tabela-wrap itens-import"><table><thead><tr><th>Cód.</th><th>Descrição</th><th>Está em</th><th>Fica em</th><th></th></tr></thead><tbody>
+        ${itens.map((i, n) => `<tr><td>${esc(i.x.codigo || '')}</td><td>${esc(i.nome)}</td><td>${i.de === 'servicos' ? 'Serviços' : 'Produtos'}</td>
+          <td><select data-org="${n}">${OPCOES.map(([k, r]) => `<option value="${k}" ${i.para === k ? 'selected' : ''}>${r}</option>`).join('')}</select></td>
+          <td data-muda="${n}"></td></tr>`).join('')}
+      </tbody></table></div>
+      <div id="resumo-org" class="resumo-importacao"></div>
+      <div class="form-acoes"><button type="button" class="btn sec" data-cancelar>Cancelar</button>
+        <button type="button" class="btn" id="confirmar-org">Salvar</button></div>
+    </div>`, (raiz) => {
+    const resumo = () => {
+      itens.forEach((i, n) => ($(`[data-muda="${n}"]`, raiz).innerHTML = i.para !== i.de ? '<span class="tag laranja">muda</span>' : ''));
+      const muda = itens.filter((i) => i.para !== i.de).length;
+      const cont = (t) => itens.filter((i) => i.para === t).length;
+      $('#resumo-org', raiz).innerHTML = `<span class="tag verde">Serviços: ${cont('servicos')}</span>
+        <span class="tag laranja">Produtos: ${cont('produtos')}</span><span class="tag cinza">${muda} mudam de aba</span>`;
+    };
+    resumo();
+    raiz.addEventListener('change', (e) => {
+      const sel = e.target.closest('[data-org]');
+      if (sel) { itens[sel.dataset.org].para = sel.value; resumo(); }
+    });
+    $('[data-cancelar]', raiz).addEventListener('click', fecharModal);
+    $('#confirmar-org', raiz).addEventListener('click', (e) => enviando(e.target, async () => {
+      const novas = { servicos: [], produtos: [] };
+      itens.filter((i) => i.para === i.de).forEach((i) => novas[i.para].push(i.x));
+      itens.filter((i) => i.para !== i.de).forEach((i) => {
+        const { descricao, nome, valor, detalhes, ...resto } = i.x;
+        // Código já usado na outra aba: recebe um novo ao salvar.
+        if (novas[i.para].some((y) => String(y.codigo || '') === String(resto.codigo || ''))) resto.codigo = '';
+        novas[i.para].push(i.para === 'servicos'
+          ? { ...resto, descricao: i.nome, valor: num(valor), ...(detalhes ? { detalhes } : {}) }
+          : { ...resto, nome: i.nome });
+      });
+      await DB.salvarCatalogo('servicos', novas.servicos);
+      await DB.salvarCatalogo('produtos', novas.produtos);
+      fecharModal();
+      avisar(`Cadastros organizados: ${novas.servicos.length} serviços e ${novas.produtos.length} produtos.`);
+      aoTerminar();
+    }));
   });
 }
 
