@@ -430,3 +430,20 @@ td.num, th.num { text-align: right; }
 .menu a.link-externo .icone { color: #1b5580; }
 .menu a.link-externo .seta-ext { margin-left: auto; width: 15px; height: 15px; }
 .menu a.link-externo span { white-space: nowrap; }
+
+/* Painel: blocos de resumo (ranking de serviços e contas) */
+.grade-resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.grade-resumo .cartao { margin-bottom: 0; }
+.bloco-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bloco-topo h3 { margin: 0; }
+.bloco-exibir { font-size: 13px; color: var(--suave); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.bloco-corpo { margin-top: 10px; }
+.bloco-resumo.recolhido .bloco-corpo { display: none; }
+.barra-linha { margin-bottom: 10px; }
+.barra-rotulo { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 3px; }
+.barra-rotulo span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra { height: 7px; background: var(--borda); border-radius: 4px; overflow: hidden; }
+.barra-cheia { height: 100%; background: var(--verde); border-radius: 4px; }
+.barra-cheia.laranja { background: #e67e22; }
+.barra-cheia.azul { background: var(--azul); }
+.barra-cheia.vermelho { background: var(--vermelho); }

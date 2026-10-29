@@ -506,7 +506,7 @@ setInterval(async () => {
 
 // Avisa quando uma versão nova do sistema foi publicada, para ninguém usar uma versão antiga
 // (uma aba aberta continua com a versão de quando foi carregada).
-const VERSAO_APP = '2026-10-20.5';
+const VERSAO_APP = '2026-10-29.1';
 async function verificarVersao() {
   try {
     const r = await fetch('versao.json', { cache: 'no-store' });
@@ -596,14 +596,61 @@ function painel(el) {
         ${DB.pode('clientes') ? '<button class="btn sec" id="novo-cli">+ Cliente</button>' : ''}
       </div></div>
     <div class="grade-kpi">${kpis.map(([r, v]) => `<div class="kpi"><div class="rotulo">${r}</div><div class="valor">${v}</div></div>`).join('')}</div>
+    ${blocosResumo(hoje, fin, verFin)}
     ${verAgenda ? `<div class="cartao"><h3>Próximos 7 dias</h3>${tabelaAgendamentos(proximos, false)}</div>` : ''}
     ${verFin ? `<div class="cartao"><h3>Contas vencidas</h3>
       ${vencidas.length ? `<div class="tabela-wrap"><table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Tipo</th><th class="num">Valor</th></tr></thead><tbody>
         ${vencidas.map((f) => `<tr><td>${dataBR(f.vencimento)}</td><td>${esc(f.descricao)}</td><td>${f.tipo === 'receita' ? 'A receber' : 'A pagar'}</td><td class="num">${moeda(f.valor)}</td></tr>`).join('')}
       </tbody></table></div>` : '<div class="vazio">Nenhuma conta vencida.</div>'}
     </div>` : ''}`;
+  el.querySelectorAll('[data-exibir]').forEach((c) => c.addEventListener('change', () => {
+    c.closest('.cartao').classList.toggle('recolhido', !c.checked);
+    try { localStorage.setItem('berbert-painel-' + c.dataset.exibir, c.checked ? '1' : '0'); } catch { /* sem armazenamento */ }
+  }));
   if (verAgenda) $('#novo-ag', el).addEventListener('click', () => formAgendamento(null, { data: hoje }));
   if (DB.pode('clientes')) $('#novo-cli', el).addEventListener('click', () => abrirCliente('novo'));
+}
+
+// Blocos do resumo: serviços que mais saem e contas a pagar/receber, cada um com "Exibir".
+function blocosResumo(hoje, fin, verFin) {
+  const blocos = [];
+  const exibir = (id) => { try { return localStorage.getItem('berbert-painel-' + id) !== '0'; } catch { return true; } };
+  const cartao = (id, titulo, corpo) => `<div class="cartao bloco-resumo${exibir(id) ? '' : ' recolhido'}">
+    <div class="bloco-topo"><h3>${titulo}</h3><label class="bloco-exibir"><input type="checkbox" data-exibir="${id}" ${exibir(id) ? 'checked' : ''}> Exibir</label></div>
+    <div class="bloco-corpo">${corpo}</div></div>`;
+  const barras = (linhas, max) => linhas.map(([rotulo, valor, texto, cor]) => `<div class="barra-linha">
+    <div class="barra-rotulo"><span>${esc(rotulo)}</span><span>${texto}</span></div>
+    <div class="barra"><div class="barra-cheia ${cor || ''}" style="width:${max > 0 ? Math.max(2, Math.round(100 * valor / max)) : 0}%"></div></div></div>`).join('');
+
+  if (DB.pode('orcamentos')) {
+    const desde = somarDias(hoje, -30);
+    const qtd = new Map();
+    DB.listar('orcamentos').forEach((o) => {
+      if (!['em_execucao', 'executado', 'finalizado'].includes(statusOrc(o)) || !o.data || o.data < desde || o.data > hoje) return;
+      (o.itens || []).forEach((i) => {
+        const nome = String(i.descricao || '').trim();
+        if (nome && !/importado do sistema anterior/i.test(nome)) qtd.set(nome, (qtd.get(nome) || 0) + (num(i.qtd) || 1));
+      });
+    });
+    const top = [...qtd].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    blocos.push(cartao('ranking', 'Serviços que mais saem', `<p class="ajuda">Ranking dos últimos 30 dias (quantidade), pelos orçamentos aprovados ou executados.</p>
+      ${top.length ? barras(top.map(([n, q]) => [n, q, q.toLocaleString('pt-BR')]), top[0][1]) : '<div class="vazio">Nenhum serviço no período.</div>'}`));
+  }
+  if (verFin) {
+    const em30 = somarDias(hoje, 30);
+    const soma = (tipo, f) => fin.filter((x) => x.tipo === tipo && !x.pago && f(x.vencimento || '')).reduce((s, x) => s + num(x.valor), 0);
+    const receber = soma('receita', (v) => v >= hoje && v <= em30);
+    const pagar = soma('despesa', (v) => v >= hoje && v <= em30);
+    const recVenc = soma('receita', (v) => v && v < hoje);
+    const pagVenc = soma('despesa', (v) => v && v < hoje);
+    const saldo = receber - pagar;
+    const linhas = [['A receber em 30 dias', receber, moeda(receber), 'verde'], ['A pagar em 30 dias', pagar, moeda(pagar), 'laranja'],
+      ['A receber vencidas', recVenc, moeda(recVenc), 'azul'], ['A pagar vencidas', pagVenc, moeda(pagVenc), 'vermelho']];
+    blocos.push(cartao('contas', 'A pagar e a receber', `<p class="ajuda">Em aberto nos próximos 30 dias. Saldo líquido:
+      <strong style="color:${saldo < 0 ? 'var(--vermelho)' : 'inherit'}">${moeda(saldo)}</strong> (receber - pagar)</p>
+      ${barras(linhas, Math.max(...linhas.map((l) => l[1])))}`));
+  }
+  return blocos.length ? `<div class="grade-resumo">${blocos.join('')}</div>` : '';
 }
 
 function tabelaAgendamentos(lista, comAcoes = true) {
