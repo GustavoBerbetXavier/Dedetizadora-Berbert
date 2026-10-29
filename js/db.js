@@ -57,7 +57,8 @@ const DB = (() => {
     if (/already registered|already been registered/i.test(m)) return 'Já existe um login com este e-mail.';
     if (/Password should be at least/i.test(m)) return 'A senha precisa ter pelo menos 6 caracteres.';
     if (/row-level security|permission denied|Sem permissão/i.test(m)) return 'Você não tem permissão para esta ação.';
-    if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão com a internet.';
+    if (/Failed to fetch|NetworkError/i.test(m)) return navigator.onLine === false ? 'Sem conexão com a internet.'
+      : 'Não foi possível falar com o servidor. Tente de novo em instantes; se continuar, desative o bloqueador do navegador (escudo do Brave) para este site.';
     return m;
   }
   function pode(modulo) {
